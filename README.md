@@ -10,29 +10,38 @@
 ## 30 秒跑通
 
 ```bash
-# 零依赖，只需 Python 3.12
-python3 -m injlab demo
+# 一次性：建虚拟环境（系统自带的 python3 是 3.9.6，太老，别用）
+bash scripts/setup_venv.sh
+
+# 每次开新终端：
+source .venv/bin/activate
+
+# 跑（keyword 检测器零依赖，装了 sklearn 才能用 tfidf 两版）
+python -m injlab demo
 ```
 
-不用装任何包就能看到完整实验结果：
+> VS Code 用户：打开项目后直接点右上角三角即可，仓库已带 `.vscode/settings.json`，
+> 会把解释器和 Code Runner 都指到 `.venv/bin/python`。没生效的话点右下角解释器手动选 `.venv/bin/python`。
+
+不用装任何包就能看到完整实验结果（数字随数据规模变化）：
 
 ```
 检测器: keyword_stub   （阈值在训练集上校准）
 ========================================================
   阈值 threshold      = 0.5000
-  TPR @ FPR=1%        = 0.697   (实际 FPR 0.000)
-  TPR @ FPR=10%       = 0.697
-  AUC                 = 0.848
-  Precision / Recall / F1 = 1.000 / 0.697 / 0.821
-  [注意] 测试集只有 18 条良性样本，FPR=1% 的估计不可靠（分辨率约 5.6%）。
+  TPR @ FPR=1%        = 0.778   (实际 FPR 0.000)
+  TPR @ FPR=10%       = 0.778
+  AUC                 = 0.889
+  Precision / Recall / F1 = 1.000 / 0.778 / 0.875
+  [注意] 测试集只有 9 条良性样本，FPR=1% 的估计不可靠（分辨率约 11.1%）。
 
 ========================================================
 攻击谱系（ASR = 恶意样本被判成良性的比例，越高越脆弱）
 ========================================================
   attack          family            ASR     TPR      F1
   -----------------------------------------------------
-  identity        sanity          0.303   0.697   0.821
-  zero_width      obfuscation     0.970   0.030   0.059
+  identity        sanity          0.222   0.778   0.875
+  zero_width      obfuscation     0.889   0.111   0.200
   fullwidth       obfuscation     1.000   0.000   0.000
   homoglyph       obfuscation     0.788   0.212   0.350
   base64_wrap     obfuscation     1.000   0.000   0.000
@@ -42,7 +51,7 @@ python3 -m injlab demo
 被四种**不需要任何机器学习知识**的字符级混淆直接打穿。
 这不是危言耸听，是 10 行 base64 编码的结果。
 
-> identity 的 ASR = 0.303 = 1 − TPR，是链路自检：恒等变换下"逃逸率"必须等于漏检率。
+> identity 的 ASR = 0.222 = 1 − TPR，是链路自检：恒等变换下"逃逸率"必须等于漏检率。
 > 如果这个等式不成立，说明评测代码有 bug，后面所有数字都别信。
 
 ---

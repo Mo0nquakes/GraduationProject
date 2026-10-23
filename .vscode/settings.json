@@ -1,0 +1,18 @@
+{
+  // 让 VS Code 用项目虚拟环境里的 python，而不是系统里那个什么都没装的 python3(3.9.6)
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.extraPaths": ["${workspaceFolder}"],
+
+  // 如果你装的是 Code Runner 插件：右上角三角默认执行 "python -u"，就在这里改掉。
+  // ${workspaceFolder} 是绝对路径，写死也不怕换目录。
+  "code-runner.executorMap": {
+    "python": "${workspaceFolder}/.venv/bin/python -u"
+  },
+  "code-runner.runInTerminal": true,
+  "code-runner.ignoreSelection": true,
+
+  "terminal.integrated.env.osx": {
+    "PYTHONPATH": "${workspaceFolder}"
+  }
+}

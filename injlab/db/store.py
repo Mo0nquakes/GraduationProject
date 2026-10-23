@@ -25,7 +25,9 @@ class Store:
     def __init__(self, db_path: str | Path = "data/injlab.db") -> None:
         self.path = Path(db_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        # check_same_thread=False：FastAPI 把同步端点丢到线程池里执行，
+        # 连接在 startup 线程创建、在请求线程使用，默认会直接报错。
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
 

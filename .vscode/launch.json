@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "injlab serve（启动 API）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "injlab",
+      "args": ["serve"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "injlab demo（跑一次评测）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "injlab",
+      "args": ["demo"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "当前文件",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}
