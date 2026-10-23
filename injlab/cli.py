@@ -35,6 +35,18 @@ def _make_detector(kind: str) -> BaseDetector:
     raise SystemExit(f"未知检测器: {kind}（可选 keyword / tfidf-word / tfidf-char）")
 
 
+def _fit(det, train, cfg):
+    """统一装配：缺依赖时给一句人话，而不是抛 traceback 吓人。"""
+    try:
+        return det.fit([r["text"] for r in train], [r["label"] for r in train],
+                       fpr_target=cfg.fpr_target)
+    except ModuleNotFoundError as e:
+        raise SystemExit(
+            f"检测器 {getattr(det, 'name', '?')} 需要额外的包: {e.name}\n"
+            f"请执行: bash scripts/setup_venv.sh   # 或 pip install -r requirements.txt"
+        ) from e
+
+
 def _print_banner(title: str) -> None:
     print(f"\n{'=' * 72}\n{title}\n{'=' * 72}")
 
@@ -44,7 +56,9 @@ def cmd_demo(args: argparse.Namespace) -> int:
     if args.seed is not None:
         cfg.seed = args.seed
 
-    rows = toy.build(cfg.toy_per_class)
+    rows = toy.build(cfg.toy_per_class, include_hard=args.hard_negatives)
+    if args.hard_negatives:
+        print("[data] 已混入 3 条难负样本（良性但含 'ignore previous instructions' 等词组）")
     rows, dropped = dedup(rows)
     train, test = stratified_split(rows, cfg.test_ratio, cfg.seed)
     print(f"[data] 生成 {len(rows) + dropped} 条 -> 去重丢弃 {dropped} 条 -> "
@@ -63,8 +77,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
                                split_rule=f"stratified,test_ratio={cfg.test_ratio},seed={cfg.seed}")
         print(f"[db] dataset_version_id={dv_id}  {cfg.db_path}")
 
-    detector.fit([r["text"] for r in train], [r["label"] for r in train],
-                 fpr_target=cfg.fpr_target)
+    _fit(detector, train, cfg)
     if store is not None:
         model_version_id = store.add_model_version(
             name=detector.name, arch=args.detector, ckpt_path=None,
@@ -125,8 +138,7 @@ def cmd_truncation(args: argparse.Namespace) -> int:
     cfg = load(args.config)
     rows, _ = dedup(toy.build(cfg.toy_per_class))
     train, _ = stratified_split(rows, cfg.test_ratio, cfg.seed)
-    det = _make_detector(args.detector).fit(
-        [r["text"] for r in train], [r["label"] for r in train], fpr_target=cfg.fpr_target)
+    det = _fit(_make_detector(args.detector), train, cfg)
 
     doc = make_long_document(body_sentences=args.sentences)
     n_words = len(doc.split())
@@ -151,8 +163,7 @@ def cmd_rag(args: argparse.Namespace) -> int:
     cfg = load(args.config)
     rows, _ = dedup(toy.build(cfg.toy_per_class))
     train, _ = stratified_split(rows, cfg.test_ratio, cfg.seed)
-    det = _make_detector(args.detector).fit(
-        [r["text"] for r in train], [r["label"] for r in train], fpr_target=cfg.fpr_target)
+    det = _fit(_make_detector(args.detector), train, cfg)
     score_fn = lambda t: float(det.predict_proba([t])[0])  # noqa: E731
 
     from .rag.mini_rag import default_store, run_episode
@@ -203,6 +214,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--detector", default="keyword",
                    choices=["keyword", "tfidf-word", "tfidf-char"])
     d.add_argument("--seed", type=int, default=None)
+    d.add_argument("--hard-negatives", action="store_true",
+                   help="混入难负样本（A6 实验：观察规则基线崩溃）")
     d.add_argument("--no-db", action="store_true", help="不写数据库，纯离线跑")
     d.set_defaults(func=cmd_demo)
 
