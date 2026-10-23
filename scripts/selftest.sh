@@ -137,6 +137,12 @@ wait $SRV 2>/dev/null
 echo "$HEALTH" | grep -q '"ok":true' && pass "GET /health -> $HEALTH" || fail "服务没起来，看 /tmp/injlab_serve.log"
 echo "$DETECT" | grep -q '"pred":"malicious"' && pass "POST /detect 判定为 malicious" || fail "detect 结果异常"
 
+# ---- 9. build-data（离线，用 fixture 源）----
+echo "[9/9] 数据管线 build-data（fixture，离线）"
+BUILD=$("$PY" -m injlab build-data --sources fixture --no-db 2>&1)
+echo "$BUILD" | grep -q "标签分布" && pass "build-data 跑通：$(echo "$BUILD" | grep -o 'train [0-9]* / test [0-9]*' | head -1)" \
+    || fail "build-data 异常：$(echo "$BUILD" | tail -3)"
+
 echo "================================================================"
 printf " 通过 %d 项，失败 %d 项\n" "$OK" "$FAIL"
 echo "================================================================"

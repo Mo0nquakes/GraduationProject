@@ -205,6 +205,27 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_data(args) -> int:
+    """拉取真实语料 → 清洗 → 去重 → 配平 → 切分 → 落盘 → 入库。"""
+    from .data import build as build_mod
+
+    names = [x.strip() for x in args.sources.split(",") if x.strip()]
+    build_mod.build(
+        sources_names=names,
+        out_dir=args.out,
+        limit=args.limit,
+        max_per_class=args.max_per_class,
+        test_ratio=args.test_ratio,
+        seed=args.seed,
+        endpoint=args.endpoint,
+        cache=not args.no_cache,
+        near_dedup=not args.no_near_dedup,
+        use_db=not args.no_db,
+        dry_run=args.dry_run,
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="injlab", description="提示注入检测器对抗鲁棒性实验台")
     p.add_argument("--config", default="configs/default.yaml", help="YAML 配置路径")
@@ -242,6 +263,23 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--reload", action="store_true")
     s.set_defaults(func=cmd_serve)
+
+    b = sub.add_parser("build-data", help="拉取真实语料并构建带难负样本的数据集")
+    b.add_argument("--sources", default=",".join(
+        __import__("injlab.data.sources", fromlist=["DEFAULT_SOURCES"]).DEFAULT_SOURCES),
+        help="逗号分隔，可选: fixture,deepset,pint,toxicchat,wildguardmix,xstest")
+    b.add_argument("--limit", type=int, default=None, help="每个源最多取多少行（调试用）")
+    b.add_argument("--max-per-class", type=int, default=None, help="每类最多保留多少条")
+    b.add_argument("--test-ratio", type=float, default=None)
+    b.add_argument("--seed", type=int, default=None)
+    b.add_argument("--out", default="data/processed")
+    b.add_argument("--endpoint", default=None,
+                   help="HuggingFace 镜像，默认 https://hf-mirror.com")
+    b.add_argument("--no-cache", action="store_true", help="不用 data/raw 缓存，强制重新下载")
+    b.add_argument("--no-near-dedup", action="store_true", help="只做精确去重（快，但会残留变体）")
+    b.add_argument("--no-db", action="store_true", help="只落盘，不写数据库")
+    b.add_argument("--dry-run", action="store_true", help="只统计不落盘")
+    b.set_defaults(func=cmd_build_data)
     return p
 
 

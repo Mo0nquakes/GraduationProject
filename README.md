@@ -63,6 +63,7 @@ python -m injlab demo
 | `python -m injlab demo` | 跑完整实验（数据→划分→训练→攻击→指标→落库→落盘） |
 | `python -m injlab demo --detector tfidf-word` | 换成 TF-IDF + 逻辑回归（需 scikit-learn） |
 | `python -m injlab demo --hard-negatives` | **A6 实验**：混入 3 条难负样本，看规则基线如何崩 |
+| `python -m injlab build-data` | **拉真实语料**：下载→清洗→去重→配平→切分→落盘→入库 |
 | `python -m injlab truncation` | **截断攻击**：同一篇文档，朴素截断漏检、分块滑窗检出 |
 | `python -m injlab rag` | **端到端 ASR**：恶意文档污染检索库，看密钥是否泄露 |
 | `python -m injlab er` | 由 `schema.sql` 生成 Mermaid ER 图 |
@@ -83,6 +84,53 @@ $ python -m injlab rag
 ```
 
 ---
+
+## 数据集构建（build-data）
+
+前面所有 demo 用的都是模板生成的玩具数据。`build-data` 才是真正接公开语料的入口：
+
+```bash
+# 默认：deepset/prompt-injections + 合成间接注入（离线缓存可重跑）
+python -m injlab build-data --limit 250 --no-db
+
+# 只看统计，不落盘
+python -m injlab build-data --limit 250 --dry-run
+
+# 用缓存 + 写数据库（dataset_version 会记下 manifest 的 sha256）
+python -m injlab build-data --limit 250
+
+# 显式点名多个源（下面这些源网络好的时候才成功，见"已知问题"）
+python -m injlab build-data --sources deepset,pint,wildguardmix,toxicchat --limit 800
+```
+
+产物在 `data/processed/<时间戳>_<实际用到的源>/`：
+
+| 文件 | 内容 |
+|---|---|
+| `train.jsonl` / `test.jsonl` | 每行 `text / label / source / split / is_hard_negative / group / meta` |
+| `manifest.json` | 参数、去重统计、标签分布、来源分布、两个文件的 sha256 |
+
+**管线做了什么**：
+
+1. **清洗**（`prep.clean_text`）：Unicode NFKC + 剥零宽/格式字符 + 折叠空白。注意这里只清洗用于**建库和去重**，训练用的还是原文——否则等于提前替模型做了输入规范化防御，实验就证明不了防御有用。
+2. **去重**（`prep.dedup`）：精确哈希 + MinHash 近似去重（8 band × 4 row，shingle=5，32 个哈希）。公开语料里同一条注入模板会以几十种微小变体出现，不去重会把测试集污染成训练集。
+3. **分组切分**（`prep.group_split`）：同一个 `group` 的样本只会落在训练或测试的一侧。没有 group 就退化成按 `dedup_key` 切。
+4. **入库**：`dataset_version` 记录 manifest 里的 sha256，`sample` 表里每条也存 `sha256`，配合唯一索引 `ux_sample_hash` 防止重复入库。
+
+**一个必须写进论文的标注决定**：WildGuardMix 里 `prompt_harm_label == "harmful"` 的样本被标成 **benign + is_hard_negative=True**。本课题判的是"这段文本是否试图覆盖系统指令"，不是"内容是否有害"——一个暴力请求并没有覆盖任何指令，注入检测器对它报警就是误报。这条区分让"恶意内容"变成天然的难负样本，也正是 A6 实验要用的东西。
+
+**已知问题（都会写进论文的威胁部分）**：
+
+| 源 | 状况 |
+|---|---|
+| `deepset/prompt-injections` | 可用，662 行，只有 benign / direct 两类 |
+| `synth`（合成间接注入） | 模板生成，只为补 `indirect_injection` 类别空缺，**论文必须单独报剔除后的指标** |
+| `walledai/XSTest` | **gated**，需 `huggingface-cli login` 并同意条款；其他 XSTest 镜像经 hf-mirror 会卡住 |
+| `lmsys/toxic-chat` | 首包很大，镜像偶发 `ReadTimeout` |
+| `allenai/wildguardmix` | 体积大，仅在网络好时拉 |
+| `Lakera/pint-benchmark` | HF 上不稳，失败时退到 GitHub 原始文件 |
+
+`huggingface.co` 在本机直连超时，代码默认走 `HF_ENDPOINT=https://hf-mirror.com`。拉过一次的源会缓存在 `data/raw/<source>.jsonl`，之后加 `--limit` 不会再出网。
 
 ## 目录结构
 
@@ -123,7 +171,7 @@ docs/
 | 实验 | 内容 | 代码现状 |
 |---|---|---|
 | A1 基线对比 | 规则 / TF-IDF+LR / DistilBERT / 现成 guardrail | 前两个已实现，后两个待接 |
-| A2 跨集泛化 | 训练 WildGuardMix，测 ToxicChat / PINT | 待接真实语料 |
+| A2 跨集泛化 | 训练 deepset，测 PINT / ToxicChat | 数据源已接（`build-data --sources`），实验脚本待写 |
 | A3 FGSM-AT 失效 | embedding 对抗训练后，文本改写 ASR 几乎不降 | 待实现（寒假） |
 | A4 攻击谱系 | 编码 / 截断 / 语义改写 / 多轮 | 4 种编码攻击 + 截断已实现 |
 | A5 红队回路 AT | LLM 生成攻击 → 增量训练 → 再攻 | 待实现 |
@@ -138,7 +186,7 @@ docs/
 
 | 组件 | 现状 | 换成真的需要做什么 |
 |---|---|---|
-| 数据 | 手写模板，120 条级 | 接 WildGuardMix / ToxicChat / XSTest / PINT，做近重复去重 |
+| 数据 | **已接真实语料**（`build-data`）：deepset 662 行可用；WildGuardMix/ToxicChat/XSTest/PINT 是可选源，网络与 gated 限制见上文 | indirect 类目前靠合成模板补，需找 BIPIA 之类真实间接注入语料替换 |
 | 检测器 | 关键词 + TF-IDF | 加 DistilBERT 微调（手写训练循环，别用 Trainer 黑盒） |
 | token 计数 | 用空格分词近似 | 换 tokenizer 的 `offset_mapping`，才能把块分数映射回字符区间 |
 | RAG 检索 | 哈希向量 | 换 sentence-transformers 或 BM25 |
@@ -148,7 +196,7 @@ docs/
 
 **下一步优先级**（按"性价比 / 风险"排）：
 
-1. 接真实语料 + 近重复去重 —— 没有这一步，后面全是自娱自乐。
+1. ~~接真实语料 + 近重复去重~~ —— 已完成（`python -m injlab build-data`）。下一个缺口是**真实的间接注入语料**。
 2. 加 DistilBERT 基线 —— 让"传统 ML vs 预训练模型"的对比站得住。
 3. 加 LLM 改写攻击 —— 证明字符级防御不够，把论文从"字符游戏"拉到"语义对抗"。
 4. 红队回路 —— 这是 C3 贡献点，也是最能体现"对抗"的地方。
