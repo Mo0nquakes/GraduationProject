@@ -1,0 +1,18 @@
+# injlab 配置示例 —— 全部字段都有内置默认值，缺文件也能跑
+# 用 `python -m injlab demo` 时不会读取本文件；显式传 --config 才生效
+seed: 20260101
+db_path: data/injlab.db
+runs_dir: runs
+
+# 冒烟数据
+toy_per_class: 30
+test_ratio: 0.30
+
+# 评测口径
+fpr_target: 0.01        # 报 TPR@FPR=1%
+threshold: 0.50
+
+# 分块推理（截断攻击实验用）
+max_len: 512
+chunk_size: 256
+chunk_stride: 128

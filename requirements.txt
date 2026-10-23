@@ -1,0 +1,21 @@
+# 骨架阶段：只用标准库就能跑 `python -m injlab demo`，无需装任何东西。
+# 下面按"用到才装"分组，避免一开始就被依赖问题劝退。
+
+# --- 数据与基线模型（第 1 周）---
+scikit-learn>=1.3
+pandas>=2.0
+matplotlib>=3.7
+pyyaml>=6.0
+
+# --- 服务层（第 4 周）---
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
+
+# --- 深度学习（寒假再解注释，别提前装）---
+# 注意：Apple Silicon 用 torch>=2.2 的 MPS 后端；float64 不支持，
+# DataLoader num_workers>0 在 macOS 上易触发 spawn 报错，pin_memory 无效。
+# torch>=2.2
+# transformers>=4.40
+# datasets>=2.18
+# accelerate>=0.29
