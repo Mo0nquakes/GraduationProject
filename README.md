@@ -275,7 +275,7 @@ docs/
 
 ## 实验结果速览（2026-11-01 夜，A2/A3/A4/A5 首次全量）
 
-四份报告：[A2 跨集泛化](docs/A2.md) · [A4 攻击谱系](docs/A4.md) · [A3/A5 对抗训练两条路线](docs/A3A5.md) · [拍的板](docs/DECISIONS.md)
+五份文档：[结果总览](docs/RESULTS.md) · [A2 跨集泛化](docs/A2.md) · [A4 攻击谱系](docs/A4.md) · [A3/A5 对抗训练两条路线](docs/A3A5.md) · [拍的板](docs/DECISIONS.md)
 
 | 实验 | 最要紧的一个数 |
 |---|---|
