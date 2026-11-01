@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from . import metrics
+from .eval import intent
 from .config import Config
 from .db.store import Store
 from .labels import LABELS
@@ -73,6 +74,43 @@ def _recall_by_label(rows: Sequence[dict[str, Any]], scores: Sequence[float],
     return {lab: (sum(v) / len(v) if v else float("nan")) for lab, v in sorted(buckets.items())}
 
 
+def _asr_valid(validity, mal_scores, thr: float) -> float:
+    """只在意图可读的攻击上算 ASR；一条有效攻击都没有就返回 nan，不返回 0。"""
+    kept = [(ok, sc) for (ok, _w), sc in zip(validity, mal_scores) if ok is True]
+    if not kept:
+        return float("nan")
+    return sum(1 for _ok, sc in kept if sc <= thr) / len(kept)
+
+
+def _is_cue_bearing(text: str) -> bool:
+    """良性文本里是否含"看起来像注入"的词——过度防御的典型触发条件。"""
+    low = text.lower()
+    return any(w in low for w in (
+        "ignore", "disregard", "system prompt", "instruction",
+        "override", "reveal", "developer mode", "jailbreak",
+    ))
+
+
+def _fpr(rows, scores, thr: float, pred) -> tuple[float, int, int]:
+    """返回 (误报率, 误报数, 该子集样本数)。"""
+    hit = [(r, s) for r, s in zip(rows, scores) if pred(r) and r["label"] == "benign"]
+    n = sum(1 for r in rows if pred(r) and r["label"] == "benign")
+    fn = sum(1 for r, s in hit if s > thr)
+    return (fn / n if n else float("nan")), fn, n
+
+
+def overdefense_block(rows, scores, thr: float) -> dict:
+    """过度防御（over-defense）指标：只截不行，得看截错了多少。"""
+    fpr_all, fn_all, n_all = _fpr(rows, scores, thr, lambda r: True)
+    fpr_hard, fn_hard, n_hard = _fpr(rows, scores, thr, lambda r: bool(r.get("is_hard_negative")))
+    fpr_cue, fn_cue, n_cue = _fpr(rows, scores, thr, lambda r: _is_cue_bearing(r["text"]))
+    return {
+        "fpr_benign": fpr_all, "n_benign": n_all, "n_benign_flagged": fn_all,
+        "fpr_benign_hard": fpr_hard, "n_benign_hard": n_hard, "n_benign_hard_flagged": fn_hard,
+        "fpr_benign_cue": fpr_cue, "n_benign_cue": n_cue, "n_benign_cue_flagged": fn_cue,
+    }
+
+
 def run_experiment(
     cfg: Config,
     detector: BaseDetector,
@@ -109,6 +147,7 @@ def run_experiment(
         "threshold": thr,
         "latency_ms_per_item": lat,
         "recall_by_label": _recall_by_label(test, te_scores, thr),
+        "overdefense": overdefense_block(test, te_scores, thr),
     }
 
     predictions: list[dict[str, Any]] = [
@@ -122,15 +161,24 @@ def run_experiment(
     for atk in attacks:
         mixed: list[dict[str, Any]] = []
         origin_sha: dict[int, str] = {}
+        origin_text: dict[int, str] = {}
         for r in test:
             if r["label"] == "benign":
                 mixed.append(r)
             else:
                 origin_sha[len(mixed)] = r["sha256"]
+                origin_text[len(mixed)] = r["text"]
                 mixed.append({**r, "text": atk.apply(r["text"])})
 
-        atk_scores, atk_lat = _score(detector, [r["text"] for r in mixed])
         mal_idx = [i for i, r in enumerate(mixed) if r["label"] != "benign"]
+
+        # 攻击有效性：改完字之后，攻击意图还读得出来吗？
+        validity = [
+            intent.intent_preserved(origin_text[i], mixed[i]["text"])
+            for i in mal_idx
+        ]
+
+        atk_scores, atk_lat = _score(detector, [r["text"] for r in mixed])
         mal_scores = [atk_scores[i] for i in mal_idx]
         ay = _binary_y(mixed)
         apred = [1 if s > thr else 0 for s in atk_scores]
@@ -139,6 +187,13 @@ def run_experiment(
             "attack": atk.name,
             "family": getattr(atk, "family", "obfuscation"),
             "asr": metrics.asr(mal_scores, thr),
+            # 只在"意图仍可读"的攻击上算 ASR —— 这才是能写进论文的数字。
+            # 全量 ASR 会被"把文本改成人也看不懂"的攻击虚高。
+            "n_mal": len(mal_idx),
+            "n_changed": sum(1 for _ok, why in validity if "没有改变" not in why),
+            "n_intent_kept": sum(1 for ok, _w in validity if ok is True),
+            "n_intent_unknown": sum(1 for ok, _w in validity if ok is None),
+            "asr_intent_kept": _asr_valid(validity, mal_scores, thr),
             "tpr_at_fpr": metrics.tpr_at_fpr(ay, atk_scores, cfg.fpr_target)["tpr"],
             "tpr": prf["recall"],
             "f1": prf["f1"],

@@ -62,6 +62,7 @@ python -m injlab demo
 |---|---|
 | `python -m injlab demo` | 跑完整实验（数据→划分→训练→攻击→指标→落库→落盘） |
 | `python -m injlab demo --detector tfidf-word` | 换成 TF-IDF + 逻辑回归（需 scikit-learn） |
+| `python -m injlab demo --detector distilbert` | 换成 DistilBERT 微调（需 torch + transformers，A1 第三列） |
 | `python -m injlab demo --hard-negatives` | **A6 实验**：混入 3 条难负样本，看规则基线如何崩 |
 | `python -m injlab build-data` | **拉真实语料**：下载→清洗→去重→配平→切分→落盘→入库 |
 | `python -m injlab truncation` | **截断攻击**：同一篇文档，朴素截断漏检、分块滑窗检出 |
@@ -131,6 +132,37 @@ python -m injlab build-data --sources deepset,pint,wildguardmix,toxicchat --limi
 | `Lakera/pint-benchmark` | HF 上不稳，失败时退到 GitHub 原始文件 |
 
 `huggingface.co` 在本机直连超时，代码默认走 `HF_ENDPOINT=https://hf-mirror.com`。拉过一次的源会缓存在 `data/raw/<source>.jsonl`，之后加 `--limit` 不会再出网。
+
+## 三条评审意见对应到哪些代码
+
+有人指出这类课题最容易翻车的三个地方，下面是逐条对应的实现（不是口头承诺）：
+
+| 评审意见 | 代码位置 | 怎么体现 |
+|---|---|---|
+| ① 攻击"绕过检测器"不等于"真的有效"，还得证明意图保留、以及被保护模型真的照做 | `injlab/eval/intent.py`、`injlab/runner.py` 的 `ASR*`、`python -m injlab rag` | `ASR` 报全量，`ASR*` 只在"规范化后指令仍可读"的攻击上统计；`rag` 命令打印 `检测器放行 ≠ 攻击成功` 的对照表 |
+| ② 不能靠"全都拦截"刷好看的检测率 | `injlab/runner.py: overdefense_block()` | 分别报良性整体 FPR、良性难负样本 FPR、**含触发词的良性 FPR** 三档 |
+| ③ 训练/测试不能混入同模板的近似改写，否则只是背样本 | `injlab/data/prep.py: group_split()` + `leakage_report()` | 同 group 不跨侧；切分后再做一次 MinHash 两两比对，结果写进 `manifest.json` 的 `leakage` 字段 |
+
+三者的共同点：**默认往坏里报**。判不了意图的攻击算"未知"而不是"有效"；
+一条有效攻击都没有时 `ASR*` 返回 `n/a` 而不是 0；发现近似重复直接打警告。
+
+## DistilBERT 基线（A1 的第三列）
+
+```bash
+pip install torch transformers          # 约 1GB，装一次
+python -m injlab demo --detector distilbert        # 朴素截断 256 token
+python -m injlab demo --detector distilbert-chunk  # 分块滑窗取最大分
+```
+
+`injlab/models/distilbert.py` 用手写训练循环，没用 `Trainer`——因为要能直接拿 logits、
+自己控制 padding。三个 macOS/MPS 的坑已在代码里处理：
+
+1. MPS 不支持 float64：softmax 后显式 `.float()`。
+2. `DataLoader(num_workers>0)` 在 macOS 会 spawn 子进程而崩：固定 `num_workers=0`。
+3. `pin_memory` 在 MPS 上无效：固定 `False`。
+
+`fpr_target` 对它没有作用（神经网络不按分位数定阈值），阈值统一由 `runner` 在训练集上校准——
+这一点全校统一，否则各检测器的实验不可比。
 
 ## 目录结构
 
