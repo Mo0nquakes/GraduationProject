@@ -248,7 +248,14 @@ def cmd_a1(args: argparse.Namespace) -> int:
     from .eval.a1 import DEFAULT_DETECTORS, run_a1
 
     cfg = load(args.config)
-    d = _P(args.data) if args.data else sorted(_P("data/processed").glob("*"))[-1]
+    if args.data:
+        d = _P(args.data)
+    else:
+        from .paths import latest_dataset
+
+        d = latest_dataset(_P("data/processed"))
+        if d is None:
+            raise SystemExit("data/processed 下没有任何数据集，先跑: python -m injlab build-data")
     if not (d / "train.jsonl").exists():
         raise SystemExit(f"{d} 里没有 train.jsonl，先跑: python -m injlab build-data")
     print(f"[a1] 数据: {d}")

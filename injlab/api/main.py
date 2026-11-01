@@ -56,8 +56,9 @@ DEEP = ("guardrail", "distilbert")
 
 
 def _latest_data() -> Path | None:
-    ds = sorted((ROOT / "data" / "processed").glob("*/train.jsonl"))
-    return ds[-1].parent if ds else None
+    from injlab.paths import latest_dataset
+
+    return latest_dataset(ROOT / "data" / "processed")
 
 
 def _fit_all(cfg: Config) -> dict[str, Any]:

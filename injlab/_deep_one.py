@@ -23,14 +23,17 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         pass
 
-    from ..models.guardrail import GuardrailDetector
-    from ..models.distilbert import DistilBertDetector
+    from .models.guardrail import GuardrailDetector
+    from .models.distilbert import DistilBertDetector
 
     if args.detector == "guardrail":
         det = GuardrailDetector(verbose=False)
     elif args.detector == "distilbert":
-        det = DistilBertDetector(verbose=False)  # 用已保存的权重
-        det.load_or_none()
+        det = DistilBertDetector(verbose=False)
+        if not det.load_or_none():
+            # 关键：没有权重就报错退出，绝不能退回去用随机初始化的分类头——
+            # 那样会给出看起来正常、实际毫无意义的分数，比报错危险得多。
+            raise SystemExit("没有找到已训练的 DistilBERT 权重，先跑一次: python -m injlab a1 --detectors distilbert")
     else:
         raise SystemExit(f"未知深度检测器: {args.detector}")
 

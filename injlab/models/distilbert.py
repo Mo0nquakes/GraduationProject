@@ -166,11 +166,15 @@ class DistilBertDetector(BaseDetector):
         if not (_P(self.save_dir) / "config.json").exists():
             self._log("没有已保存的权重，跳过加载")
             return False
+        import torch
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+        # 必须补上 _torch：_forward 用的是 self._torch，绕过 _lazy() 就会是 None，
+        # 报 "AttributeError: 'NoneType' object has no attribute 'no_grad'"。
+        self._torch = torch
         self._tok = AutoTokenizer.from_pretrained(str(self.save_dir))
         self._model = AutoModelForSequenceClassification.from_pretrained(str(self.save_dir))
-        self._model.to(self.device)
+        self._model.to(self.device_name)
         self._model.eval()
         return True
 
