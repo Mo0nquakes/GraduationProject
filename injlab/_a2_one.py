@@ -32,6 +32,8 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--fpr", type=float, default=0.01)
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--model-dir", default=None,
+                    help="指定已落盘的权重目录（例如对抗训练后的模型），默认用 A1 那份")
     args = ap.parse_args()
 
     try:
@@ -60,7 +62,12 @@ def main() -> int:
     # 神经检测器直接用已落盘的权重：跨集评测不需要重训（重训既慢，又会把
     # A1 那份权重覆盖掉，导致两次实验用的其实是不同模型）。
     reused = False
-    if args.detector.startswith("distilbert"):
+    if args.model_dir:
+        # 指定权重时**必须**加载成功，否则就退回重训、测的其实是另一个模型，
+        # 而报告里看不出来——这种静默降级是最坏的一种 bug。
+        det.load_from(args.model_dir)
+        reused = True
+    elif args.detector.startswith("distilbert"):
         try:
             reused = bool(det.load_or_none())
         except Exception:  # noqa: BLE001

@@ -77,18 +77,7 @@ class AdversarialDistilBert(DistilBertDetector):
         self.steps = steps
         self.mix = mix
         self.name = f"distilbert-at-{adv_mode or 'none'}"
-        self._save_suffix = f"-at-{adv_mode or 'none'}"
-
-    @property
-    def save_dir(self):
-        """AT 变体单独存，**绝不覆盖** A1 那份干净模型。
-
-        覆盖的后果很隐蔽：API 的"深度检测"会悄悄换成对抗训练版，
-        A1 的数字和线上行为对不上，还没人会怀疑到这儿。
-        """
-        from pathlib import Path as _P
-
-        return _P("data") / "models" / f"distilbert-inj{self._save_suffix}"
+        self._save_dir = f"data/models/distilbert-inj-at-{adv_mode or 'none'}"
 
     def fit(self, texts: Sequence[str], labels: Sequence[str],
             fpr_target: float = 0.01, **_: Any) -> "AdversarialDistilBert":

@@ -153,7 +153,14 @@ class DistilBertDetector(BaseDetector):
     def save_dir(self):
         from pathlib import Path as _P
 
+        # 允许子类/调用方指定落盘目录（A3 的每个变体各有自己的目录）
+        if getattr(self, "_save_dir", None):
+            return _P(self._save_dir)
         return _P("data") / "models" / "distilbert-inj"
+
+    @save_dir.setter
+    def save_dir(self, value) -> None:
+        self._save_dir = value
 
     def save(self) -> None:
         self._lazy()
@@ -161,6 +168,25 @@ class DistilBertDetector(BaseDetector):
         self._model.save_pretrained(str(self.save_dir))
         self._tok.save_pretrained(str(self.save_dir))
         self._log(f"权重已保存 → {self.save_dir}")
+
+    def load_from(self, path) -> None:
+        """从指定目录加载权重；加载不了就抛异常，**绝不退回重训**。
+
+        静默降级的后果是：报告上写着"对抗训练模型"，实际测的是干净模型。
+        """
+        from pathlib import Path as _P
+
+        d = _P(path)
+        if not (d / "config.json").exists():
+            raise FileNotFoundError(f"权重目录里没有 config.json: {d}")
+        import torch
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+        self._torch = torch
+        self._tok = AutoTokenizer.from_pretrained(str(d))
+        self._model = AutoModelForSequenceClassification.from_pretrained(str(d))
+        self._model.to(self.device_name)
+        self._model.eval()
 
     def load_or_none(self) -> bool:
         """有已保存的权重就加载，没有返回 False（不静默训练）。"""

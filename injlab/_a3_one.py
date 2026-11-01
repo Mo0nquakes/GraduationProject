@@ -18,6 +18,8 @@ def main() -> int:
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--fpr", type=float, default=0.01)
+    ap.add_argument("--save", action="store_true",
+                    help="把训练后的权重落盘（供 A2 跨集评测复用）")
     ap.add_argument("--eps", type=float, default=0.05)
     ap.add_argument("--steps", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
@@ -56,8 +58,18 @@ def main() -> int:
         eps = 0.01 if args.mode == "fgsm-weak" else args.eps
         det = AdversarialDistilBert(seed=args.seed, adv_mode=adv_mode,
                                     eps=eps, steps=args.steps, mix=0.5)
-    # A3 只是对照实验，产物不落盘，免得覆盖 A1 的干净模型
-    det.save = lambda: None
+    if args.save:
+        # 每个变体单独存，**包括 clean**——否则 clean 会写回 data/models/distilbert-inj，
+        # 把 A1 和 API 正在用的那份覆盖掉（这个坑真的踩过一次）。
+        if hasattr(det, "_save_suffix"):
+            det._save_suffix = f"-at-{args.mode}"
+        else:
+            from pathlib import Path as _P
+
+            det.save_dir = _P("data") / "models" / f"distilbert-inj-at-{args.mode}"
+    else:
+        # 默认不落盘：A3 只是对照实验
+        det.save = lambda: None
     det.fit(tr_texts, [r["label"] for r in train], fpr_target=args.fpr)
     train_s = round(time.perf_counter() - t0, 1)
 
