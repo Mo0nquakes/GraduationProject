@@ -32,6 +32,10 @@ def _make_detector(kind: str) -> BaseDetector:
         except ModuleNotFoundError:
             raise SystemExit("缺少 scikit-learn，请先 pip install -r requirements.txt")
         return TfidfLogReg(analyzer=analyzer)
+    if kind == "guardrail":
+        from .models.guardrail import GuardrailDetector
+
+        return GuardrailDetector()
     if kind in ("distilbert", "distilbert-chunk"):
         from .models.distilbert import DistilBertDetector
 
@@ -237,6 +241,23 @@ def cmd_rag(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_a1(args: argparse.Namespace) -> int:
+    """A1：同一份数据、同一套攻击、同一套阈值口径下比较全部检测器。"""
+    from pathlib import Path as _P
+
+    from .eval.a1 import DEFAULT_DETECTORS, run_a1
+
+    cfg = load(args.config)
+    d = _P(args.data) if args.data else sorted(_P("data/processed").glob("*"))[-1]
+    if not (d / "train.jsonl").exists():
+        raise SystemExit(f"{d} 里没有 train.jsonl，先跑: python -m injlab build-data")
+    print(f"[a1] 数据: {d}")
+    dets = args.detectors.split(",") if args.detectors else list(DEFAULT_DETECTORS)
+    print(f"[a1] 检测器: {', '.join(dets)}")
+    run_a1(cfg, d, detectors=dets)
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     cfg = load(args.config)
     store = Store(cfg.db_path)
@@ -285,7 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("demo", help="跑通完整链路并打印实验表格（默认命令）")
     d.add_argument("--detector", default="keyword",
-                   choices=["keyword", "tfidf-word", "tfidf-char", "distilbert", "distilbert-chunk"])
+                   choices=["keyword", "tfidf-word", "tfidf-char", "distilbert", "distilbert-chunk", "guardrail"])
     d.add_argument("--seed", type=int, default=None)
     d.add_argument("--hard-negatives", action="store_true",
                    help="混入难负样本（A6 实验：观察规则基线崩溃）")
@@ -297,15 +318,20 @@ def build_parser() -> argparse.ArgumentParser:
     e.set_defaults(func=cmd_er)
 
     t = sub.add_parser("truncation", help="截断攻击 vs 分块滑窗 对照实验")
-    t.add_argument("--detector", default="keyword", choices=["keyword", "tfidf-word", "tfidf-char", "distilbert", "distilbert-chunk"])
+    t.add_argument("--detector", default="keyword", choices=["keyword", "tfidf-word", "tfidf-char", "distilbert", "distilbert-chunk", "guardrail"])
     t.add_argument("--sentences", type=int, default=200)
     t.add_argument("--threshold", type=float, default=0.5)
     t.set_defaults(func=cmd_truncation)
 
     r = sub.add_parser("rag", help="RAG 靶子端到端 ASR 演示")
-    r.add_argument("--detector", default="keyword", choices=["keyword", "tfidf-word", "tfidf-char", "distilbert", "distilbert-chunk"])
+    r.add_argument("--detector", default="keyword", choices=["keyword", "tfidf-word", "tfidf-char", "distilbert", "distilbert-chunk", "guardrail"])
     r.add_argument("--threshold", type=float, default=0.5)
     r.set_defaults(func=cmd_rag)
+
+    a1 = sub.add_parser("a1", help="A1 全基线对比（真数据，一张表）")
+    a1.add_argument("--data", default=None, help="data/processed/<目录>，默认取最新")
+    a1.add_argument("--detectors", default=None, help="逗号分隔，默认全部")
+    a1.set_defaults(func=cmd_a1)
 
     v = sub.add_parser("verify", help="校验检测日志的哈希链")
     v.set_defaults(func=cmd_verify)

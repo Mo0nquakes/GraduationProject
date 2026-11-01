@@ -14,7 +14,10 @@ from __future__ import annotations
 import random
 from typing import Any, Sequence
 
+from ..hfenv import ensure_hf_env
 from .base import BaseDetector
+
+ensure_hf_env()
 
 
 def _pick_device() -> str:
@@ -44,7 +47,7 @@ class DistilBertDetector(BaseDetector):
     """
 
     def __init__(self, model_name: str = "distilbert-base-uncased",
-                 epochs: int = 3, batch_size: int = 16, lr: float = 2e-5,
+                 epochs: int = 3, batch_size: int = 8, lr: float = 2e-5,
                  max_len: int = 256, chunked: bool = False,
                  chunk_size: int = 256, chunk_stride: int = 128,
                  device: str | None = None, seed: int = 20260101,
