@@ -63,7 +63,9 @@ python -m injlab demo
 | `python -m injlab demo` | 跑完整实验（数据→划分→训练→攻击→指标→落库→落盘） |
 | `python -m injlab demo --detector tfidf-word` | 换成 TF-IDF + 逻辑回归（需 scikit-learn） |
 | `python -m injlab demo --detector distilbert` | 换成 DistilBERT 微调（需 torch + transformers，A1 第三列） |
-| `python -m injlab demo --hard-negatives` | **A6 实验**：混入 3 条难负样本，看规则基线如何崩 |
+| `bash scripts/run_all.sh` | **一条命令跑完 A1–A7**（quick 模式约 3 分钟，验证链路） |
+| `bash scripts/run_all.sh full` | 与论文数字同配置的全量跑（约 30–40 分钟） |
+| `python -m injlab demo --hard-negatives` | **A6 速看**：混入 3 条难负样本，看规则基线如何崩 |
 | `python -m injlab build-data` | **拉真实语料**：下载→清洗→去重→配平→切分→落盘→入库 |
 | `python -m injlab truncation` | **截断攻击**：同一篇文档，朴素截断漏检、分块滑窗检出 |
 | `python -m injlab rag` | **端到端 ASR**：恶意文档污染检索库，看密钥是否泄露 |
