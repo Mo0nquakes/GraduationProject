@@ -5,563 +5,714 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>injlab · 提示注入检测器对抗鲁棒性实验台</title>
 <style>
-/* 全部内联：页面只发一次请求，断网也能跑 */
+/* ---------- 设计令牌（Swiss Modernism 2.0 的克制版） ---------- */
 :root{
-  --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eef2f6; --line:#d8dee6;
-  --ink:#1f2933; --ink2:#5b6b7c; --ink3:#8894a3;
-  --blue:#2f5d8a; --blue2:#e8f0f8; --red:#b91c1c; --red2:#fdeaea;
-  --green:#15803d; --green2:#e8f6ed; --amber:#b45309; --amber2:#fdf3e3;
-  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
+  --bg:#F8FAFC; --panel:#FFFFFF; --ink:#0F172A; --muted:#5B6B7F;
+  --line:#CBD5E1; --line-soft:#E7EDF5;
+  --brand:#1E3A5F; --brand-ink:#FFFFFF; --brand-ghost:#E7EDF5;
+  --accent:#A16207; --danger:#DC2626; --ok:#15803D; --warn:#B45309;
+  --hot:#DC2626; --warm:#F59E0B;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+  --r:10px; --maxw:1180px;
+  --serif:Georgia,"Times New Roman","Songti SC","Noto Serif CJK SC",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Helvetica Neue",Arial,"Noto Sans CJK SC",sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
 }
-[data-theme="dark"]{
-  --bg:#14181d; --bg2:#1a1f26; --bg3:#232a33; --line:#333c48;
-  --ink:#e6eaf0; --ink2:#a8b3c1; --ink3:#78838f;
-  --blue:#7aa7d4; --blue2:#1d2b3a; --red:#e8756d; --red2:#3a2222;
-  --green:#7ec98f; --green2:#1c2f22; --amber:#e0a458; --amber2:#33291a;
-  --shadow:0 1px 2px rgba(0,0,0,.4);
+html[data-theme=dark]{
+  --bg:#0B1220; --panel:#111A2B; --ink:#E8EEF7; --muted:#93A4BA;
+  --line:#243348; --line-soft:#1A2537;
+  --brand:#8FB3D9; --brand-ink:#0B1220; --brand-ghost:#16233A;
+  --accent:#E0A94A; --danger:#FF7A7A; --ok:#5BC48A; --warn:#F0B25A;
+  --hot:#FF7A7A; --warm:#F0B25A;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-  -webkit-font-smoothing:antialiased}
-a{color:var(--blue)}
-button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--bg);
-  color:var(--ink);border-radius:6px;padding:7px 13px;transition:.12s}
-button:hover{background:var(--bg3)}
-button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-button.primary:hover{filter:brightness(1.08)}
-button:disabled{opacity:.5;cursor:not-allowed}
-input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);
-  border:1px solid var(--line);border-radius:6px;padding:7px 9px}
-textarea{width:100%;min-height:150px;resize:vertical;line-height:1.7;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
-header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);
-  background:var(--bg2);position:sticky;top:0;z-index:10}
-.brand{font-weight:650;letter-spacing:.02em}
-.brand small{font-weight:400;color:var(--ink3);margin-left:8px;font-size:12px}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; min-height:100vh;
+}
+a{color:var(--brand); text-decoration:none}
+a:hover{text-decoration:underline}
+.mono{font-family:var(--mono); font-size:.86em}
+.dim{color:var(--muted)}
+
+/* ---------- 顶栏 ---------- */
+header{
+  position:sticky; top:0; z-index:20; background:var(--bg);
+  border-bottom:1px solid var(--line);
+}
+.hbar{max-width:var(--maxw); margin:0 auto; padding:0 var(--s5); height:60px;
+  display:flex; align-items:center; gap:var(--s4)}
+.brand{display:flex; align-items:baseline; gap:var(--s3); min-width:0}
+.brand b{font-family:var(--serif); font-size:20px; letter-spacing:.02em; font-weight:700}
+.brand span{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .spacer{flex:1}
-nav{display:flex;gap:2px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--bg2)}
-nav button{border:0;background:none;border-radius:0;padding:11px 15px;color:var(--ink2);
-  border-bottom:2px solid transparent}
-nav button.on{color:var(--ink);border-bottom-color:var(--blue);font-weight:600}
-main{padding:22px;max-width:1180px;margin:0 auto}
-.page{display:none}.page.on{display:block}
-.card{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px;box-shadow:var(--shadow)}
-.card h3{margin:0 0 4px;font-size:15px}
-.card p.hint{margin:0 0 12px;color:var(--ink3);font-size:12.5px}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:860px){.grid2{grid-template-columns:1fr}}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--ink2);font-weight:600;font-size:12px;text-transform:none}
-td.num{font-variant-numeric:tabular-nums;text-align:right}
-.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
-.badge.bad{background:var(--red2);color:var(--red)}
-.badge.ok{background:var(--green2);color:var(--green)}
-.badge.warn{background:var(--amber2);color:var(--amber)}
-.badge.mute{background:var(--bg3);color:var(--ink3)}
-.bar{height:9px;border-radius:99px;background:var(--bg3);overflow:hidden;margin:8px 0 4px}
-.bar i{display:block;height:100%;border-radius:99px;transition:width .35s}
-.hl{background:var(--red2);box-shadow:inset 0 -2px 0 var(--red);border-radius:2px}
-.doc{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto;
-  background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.75}
-.kv{display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2);margin-top:6px}
-.kv b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
-.step{border-left:3px solid var(--line);padding:2px 0 2px 13px;margin:11px 0}
-.step.pass{border-left-color:var(--green)}
-.step.fail{border-left-color:var(--red)}
-.step.skip{border-left-color:var(--amber)}
-.step .t{font-weight:600;font-size:13.5px}
-.step .n{color:var(--ink3);font-size:12px}
-.step .r{font-size:12.5px;margin-top:3px}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
-.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
-  border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
-@keyframes sp{to{transform:rotate(360deg)}}
-.chartbox{position:relative;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 6px 4px}
-.chartbox svg{display:block;width:100%;height:auto}
-.chartbox .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);
-  font-size:12px;line-height:1.5;padding:7px 10px;border-radius:6px;opacity:0;transition:opacity .1s;
-  white-space:nowrap;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.18)}
-.chartbox .tip.on{opacity:1}
-.chartbox .bar-rect{transition:opacity .12s}
-.chartbox g:hover .bar-rect{opacity:.72}
-img.chart{width:100%;max-height:540px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff}
-footer{color:var(--ink3);font-size:12px;text-align:center;padding:26px 0 34px}
-/* 论文截图模式：去掉一切装饰 */
-body.print header,body.print nav,body.print button,body.print footer{display:none!important}
-body.print main{padding:0;max-width:100%}
-body.print .card{box-shadow:none;background:#fff;border-color:#ccc}
-body.print .page{display:block!important;margin-bottom:26px}
+.ctl{display:flex; align-items:center; gap:var(--s2); font-size:12px; color:var(--muted)}
+select,button,input,textarea{font-family:inherit; font-size:inherit; color:inherit}
+select{
+  background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:7px 10px; font-size:13px; min-height:36px;
+}
+button{
+  cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+  border-radius:8px; padding:8px 14px; font-size:13.5px; line-height:1.2;
+  transition:background .16s ease, border-color .16s ease, transform .16s ease, color .16s ease;
+}
+button:hover{border-color:var(--brand); transform:translateY(-1px)}
+button:active{transform:none}
+button:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{
+  outline:2px solid var(--brand); outline-offset:2px;
+}
+button.primary{background:var(--brand); border-color:var(--brand); color:var(--brand-ink)}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent}
+button:disabled{opacity:.5; cursor:progress; transform:none}
+#themeBtn{display:inline-flex; align-items:center; gap:6px; padding:7px 11px}
+
+/* ---------- 导航 ---------- */
+nav{border-bottom:1px solid var(--line); background:var(--bg); position:sticky; top:60px; z-index:19}
+.nbar{max-width:var(--maxw); margin:0 auto; padding:0 var(--s5); display:flex; gap:var(--s2); overflow-x:auto}
+nav button{
+  border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent;
+  padding:12px 10px; color:var(--muted); font-size:13.5px; white-space:nowrap;
+}
+nav button:hover{color:var(--ink); transform:none; border-bottom-color:var(--line)}
+nav button.on{color:var(--ink); border-bottom-color:var(--accent); font-weight:600}
+
+/* ---------- 主体 ---------- */
+main{flex:1; width:100%; max-width:var(--maxw); margin:0 auto; padding:var(--s6) var(--s5) var(--s8)}
+.view{display:none}
+.view.on{display:block; animation:fade .22s ease-out both}
+@keyframes fade{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+
+/* ---------- 首页 ---------- */
+.hero{padding:var(--s7) 0 var(--s6); border-bottom:1px solid var(--line)}
+.kicker{font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700}
+.hero h1{
+  font-family:var(--serif); font-weight:700; font-size:clamp(30px,4.2vw,52px);
+  line-height:1.14; letter-spacing:-.01em; margin:var(--s4) 0 var(--s4); max-width:20ch;
+}
+.hero p.lede{font-size:17px; line-height:1.75; color:var(--muted); max-width:62ch; margin:0 0 var(--s5)}
+.cta{display:flex; gap:var(--s3); flex-wrap:wrap; align-items:center}
+.cta .hint{font-size:12.5px; color:var(--muted)}
+
+.tiles{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
+  border:1px solid var(--line); border-radius:var(--r); overflow:hidden; margin:var(--s6) 0}
+.tile{background:var(--panel); padding:var(--s5)}
+.tile .n{font-family:var(--serif); font-size:34px; line-height:1.1; font-weight:700}
+.tile .k{font-size:12.5px; color:var(--muted); margin-top:2px}
+
+.steps{display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s5); margin-top:var(--s6)}
+.step{border-top:2px solid var(--ink); padding-top:var(--s4)}
+.step .no{font-family:var(--serif); font-size:13px; letter-spacing:.1em; color:var(--accent)}
+.step h3{font-family:var(--serif); font-size:19px; margin:var(--s2) 0 var(--s2); font-weight:700}
+.step p{margin:0; font-size:13.5px; color:var(--muted)}
+
+/* ---------- 卡片与通用块 ---------- */
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:var(--s5)}
+.card + .card{margin-top:var(--s5)}
+.card h3{font-family:var(--serif); font-size:17px; margin:0 0 var(--s2); font-weight:700}
+.card .sub{font-size:12.5px; color:var(--muted); margin:0 0 var(--s4); line-height:1.6}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:var(--s5)}
+@media (max-width:980px){.grid2,.steps,.tiles,.charts{grid-template-columns:1fr}}
+
+/* ---------- 检测台 ---------- */
+.lab{display:grid; grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr); gap:var(--s5); align-items:start}
+@media (max-width:980px){.lab{grid-template-columns:1fr}}
+textarea{
+  width:100%; min-height:230px; resize:vertical; padding:var(--s4);
+  border:1px solid var(--line); border-radius:8px; background:var(--bg);
+  font-family:var(--mono); font-size:13px; line-height:1.6;
+}
+.row{display:flex; gap:var(--s2); flex-wrap:wrap; align-items:center; margin-top:var(--s3)}
+.check{display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer}
+.check input{accent-color:var(--brand); width:15px; height:15px}
+
+.vd{display:flex; align-items:flex-end; justify-content:space-between; gap:var(--s4); flex-wrap:wrap}
+.chip{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+  padding:4px 10px; border-radius:999px; border:1px solid transparent}
+.chip.bad{color:var(--danger); background:color-mix(in srgb,var(--danger) 10%,transparent); border-color:color-mix(in srgb,var(--danger) 28%,transparent)}
+.chip.good{color:var(--ok); background:color-mix(in srgb,var(--ok) 10%,transparent); border-color:color-mix(in srgb,var(--ok) 28%,transparent)}
+.chip.flat{color:var(--muted); background:var(--line-soft); border-color:var(--line)}
+.big{font-family:var(--serif); font-size:40px; line-height:1; font-weight:700; font-variant-numeric:tabular-nums}
+.bar{position:relative; height:8px; border-radius:999px; background:var(--line-soft); margin:var(--s4) 0 var(--s3); overflow:hidden}
+.bar > i{position:absolute; inset:0 auto 0 0; border-radius:999px; background:var(--ok);
+  transition:width .4s cubic-bezier(.22,.61,.36,1), background .2s}
+.bar > i.bad{background:var(--danger)}
+.bar > em{position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--ink); opacity:.55}
+.meta{display:flex; gap:var(--s4); flex-wrap:wrap; font-size:12px; color:var(--muted)}
+.doc{margin-top:var(--s4); padding:var(--s4); border:1px solid var(--line-soft); border-radius:8px;
+  background:var(--bg); font-size:13px; line-height:1.8; white-space:pre-wrap; word-break:break-word}
+.doc mark{background:color-mix(in srgb,var(--hot) 18%,transparent); color:inherit;
+  border-bottom:2px solid var(--hot); padding:1px 0; border-radius:2px}
+.doc mark.warm{background:color-mix(in srgb,var(--warm) 22%,transparent); border-bottom-color:var(--warm)}
+.empty{color:var(--muted); font-size:13px; padding:var(--s5) 0; text-align:center}
+
+/* ---------- 剧本 ---------- */
+.tl{position:relative; margin-top:var(--s5); padding-left:var(--s6)}
+.tl::before{content:""; position:absolute; left:9px; top:6px; bottom:6px; width:1px; background:var(--line)}
+.sitem{position:relative; padding:0 0 var(--s5)}
+.sitem::before{content:""; position:absolute; left:-24px; top:6px; width:11px; height:11px; border-radius:50%;
+  background:var(--panel); border:2px solid var(--line)}
+.sitem.ok::before{border-color:var(--ok); background:var(--ok)}
+.sitem.bad::before{border-color:var(--danger); background:var(--danger)}
+.sitem .t{font-weight:600; font-size:14px}
+.sitem .n{font-size:12.5px; color:var(--muted); margin:2px 0 var(--s2)}
+.sitem .r{display:flex; gap:var(--s3); align-items:center; flex-wrap:wrap; font-size:12.5px}
+.sitem.appear{animation:fade .25s ease-out both}
+
+/* ---------- 表格 ---------- */
+table{width:100%; border-collapse:collapse; font-size:13px}
+th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+th{font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600;
+  border-bottom:1px solid var(--line); white-space:nowrap}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+tbody tr:hover{background:var(--line-soft)}
+.tag{display:inline-block; font-size:11px; padding:1px 8px; border-radius:999px;
+  background:var(--line-soft); color:var(--muted)}
+.sc{font-variant-numeric:tabular-nums; font-weight:600}
+.sc.bad{color:var(--danger)} .sc.good{color:var(--ok)} .sc.mid{color:var(--warn)}
+.delta{font-size:11.5px; color:var(--muted); margin-left:6px}
+
+.charts{display:grid; grid-template-columns:1fr 1fr; gap:var(--s5)}
+img.chart{width:100%; max-height:420px; object-fit:contain; border:1px solid var(--line-soft);
+  border-radius:8px; background:#fff; padding:var(--s3)}
+
+.stats{display:grid; grid-template-columns:repeat(8,1fr); gap:var(--s4)}
+@media (max-width:980px){.stats{grid-template-columns:repeat(4,1fr)}}
+.stat .n{font-family:var(--serif); font-size:24px; font-weight:700; font-variant-numeric:tabular-nums}
+.stat .k{font-size:11.5px; color:var(--muted)}
+
+footer{border-top:1px solid var(--line); padding:var(--s5); text-align:center;
+  font-size:12px; color:var(--muted); background:var(--bg)}
+.banner{display:none; margin-bottom:var(--s4); padding:10px 14px; border-radius:8px;
+  background:var(--line-soft); border:1px solid var(--line); font-size:12.5px; color:var(--warn)}
+.banner.on{display:block}
+body.print header,body.print nav,body.print footer,body.print .noprint{display:none!important}
+body.print main{padding-top:var(--s5)}
 </style>
 </head>
 <body>
+
 <header>
-  <div class="brand">injlab <small>提示注入检测器 · 对抗鲁棒性实验台</small></div>
-  <div class="spacer"></div>
-  <label style="color:var(--ink2);font-size:12.5px">检测器
-    <select id="detSel" style="margin-left:6px"></select>
-  </label>
-  <button id="themeBtn" title="切换深浅色">◐ 深色</button>
+  <div class="hbar">
+    <div class="brand"><b>injlab</b><span>提示注入检测器 · 对抗鲁棒性实验台</span></div>
+    <div class="spacer"></div>
+    <div class="ctl">
+      <label for="detSel" class="noprint">检测器</label>
+      <select id="detSel" class="noprint" aria-label="选择检测器"></select>
+      <button id="themeBtn" class="noprint" aria-label="切换配色">◐ 深色</button>
+    </div>
+  </div>
+  <nav><div class="nbar">
+    <button data-tab="home" class="on">首页</button>
+    <button data-tab="lab">检测台</button>
+    <button data-tab="scenario">一键剧本</button>
+    <button data-tab="attacks">攻击谱系</button>
+    <button data-tab="exp">实验对比</button>
+    <button data-tab="audit">审计链</button>
+  </div></nav>
 </header>
 
-<nav>
-  <button class="on" data-tab="lab">检测台</button>
-  <button data-tab="scenario">一键剧本</button>
-  <button data-tab="attacks">攻击谱系</button>
-  <button data-tab="exp">实验对比</button>
-  <button data-tab="audit">审计链</button>
-</nav>
-
 <main>
-<!-- ============ 检测台 ============ -->
-<section class="page on" id="p-lab">
-  <div class="card">
-    <h3>提交文本做检测</h3>
-    <p class="hint">检测器给出分数与逐块分数；超过阈值的片段会在原文里标红。默认用 tfidf-char——它在本项目 A1 对比里指标最好，且不需要加载神经网络。</p>
-    <textarea id="input" placeholder="粘贴一段文本，或点下面的「随机样本」从真实语料里取一条…"></textarea>
-    <div class="row" style="margin-top:10px">
-      <button class="primary" id="btnDetect">检测</button>
-      <button id="btnRand">随机样本</button>
-      <button id="btnCompare" title="用两族检测器各打一次分；神经模型走子进程，约 4–8 秒">两族对比</button>
-      <label class="row" style="gap:5px;font-size:12.5px;color:var(--ink2)">
-        <input type="checkbox" id="normChk" style="width:auto"> 先做输入规范化
-      </label>
+  <!-- ========== 首页 ========== -->
+  <section class="view on" id="v-home">
+    <div class="hero">
+      <div class="kicker">Graduation Project · 2026</div>
+      <h1>检测器挡得住<br>没见过的攻击吗？</h1>
+      <p class="lede">
+        大模型把网页、文档、邮件直接拼进提示词，而写这些内容的人不是开发者。
+        外围挂一个注入检测器是现在最常见的防线——但绝大多数检测器只在固定的干净测试集上报告准确率。
+        这个实验台要回答的是：<strong>当攻击者知道你在用检测器，并针对它改写输入时，它还剩多少能力。</strong>
+      </p>
+      <div class="cta">
+        <button class="primary" id="goLab">进入检测台 →</button>
+        <button class="ghost" id="goScript">看一遍完整剧本</button>
+        <span class="hint">全部在本机运行，不联网、不调用任何外部接口</span>
+      </div>
     </div>
-    <div id="out"></div>
-  </div>
-</section>
 
-<!-- ============ 一键剧本 ============ -->
-<section class="page" id="p-scenario">
-  <div class="card">
-    <h3>一键剧本</h3>
-    <p class="hint">顺序固定（正常 → 注入 → 绕过 → 加固 → 长文档 → 审计），内容每次随机：用的良性问题、载荷、混淆方式都会变。seed 会显示出来，点「重放」能复现同一遍。</p>
-    <div class="row">
-      <button class="primary" id="btnPlay">跑一遍</button>
-      <button id="btnReplay">重放上一遍</button>
-      <span id="seedBox" class="mono" style="color:var(--ink3)"></span>
+    <div class="tiles">
+      <div class="tile"><div class="n" id="tDet">—</div><div class="k">个检测器同台对比</div></div>
+      <div class="tile"><div class="n" id="tTest">—</div><div class="k">条留出测试样本</div></div>
+      <div class="tile"><div class="n" id="tAtk">—</div><div class="k">种文本空间攻击</div></div>
+      <div class="tile"><div class="n" id="tLog">—</div><div class="k">条哈希链审计记录</div></div>
     </div>
-    <div id="scriptOut" style="margin-top:14px"></div>
-  </div>
-</section>
 
-<!-- ============ 攻击谱系 ============ -->
-<section class="page" id="p-attacks">
-  <div class="card">
-    <h3>攻击谱系</h3>
-    <p class="hint">同一句载荷经过不同变换后的样子。点「试一下」把它送进检测台，直接看分数掉多少。</p>
-    <div id="atkOut">加载中…</div>
-  </div>
-</section>
+    <div class="steps">
+      <div class="step">
+        <div class="no">01 · 数据</div>
+        <h3>带难负样本的基准</h3>
+        <p>良性、直接注入、间接注入三类；刻意收进"内容有害但没有覆盖指令"的难负样本，
+           让检测器不能靠"看起来像坏事"蒙对。</p>
+      </div>
+      <div class="step">
+        <div class="no">02 · 攻击</div>
+        <h3>文本空间的攻击谱系</h3>
+        <p>零宽字符、全角化、同形字、编码包裹、语义改写，以及在 512 token 之后的截断注入。
+           每一条都先判"人还读得懂吗"，只统计改完仍然可读的攻击。</p>
+      </div>
+      <div class="step">
+        <div class="no">03 · 防御</div>
+        <h3>规范化 + 红队回路</h3>
+        <p>输入规范化是确定性、零训练成本的补丁；红队回路对抗训练把新变体并回训练集。
+           代价与收益都在这页看得见。</p>
+      </div>
+    </div>
+  </section>
 
-<!-- ============ 实验对比 ============ -->
-<section class="page" id="p-exp">
-  <div class="card">
-    <h3>A1 全基线对比</h3>
-    <p class="hint">同一份数据、同一套攻击、同一套阈值口径。阈值只在训练集良性样本上校准，正样本标签不参与。</p>
-    <div id="svgA1" class="chartbox"><p class="hint">加载中…</p></div>
-    <div class="kv" id="a1Meta"></div>
-    <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--ink2);font-size:12.5px">论文用静态图（matplotlib 预渲染 PNG）</summary>
-      <img class="chart" id="chartA1" alt="A1 对比图" style="margin-top:10px">
-    </details>
-  </div>
-  <div class="card">
-    <h3>攻击谱系鲁棒性</h3>
-    <p class="hint">格子里的数字是 ASR*：只统计"改完人还读得懂"的攻击。n/a 有两种情况——identity 不改变任何字符，按定义不算攻击（它的 ASR 见命令行，应等于 1−TPR）；base64_wrap 把载荷变成了人读不懂的编码，同样不算有效攻击。</p>
-    <img class="chart" id="chartAtk" alt="攻击谱系热力图">
-  </div>
-  <div class="card">
-    <h3>运行记录</h3>
-    <div id="expOut">加载中…</div>
-  </div>
-</section>
+  <!-- ========== 检测台 ========== -->
+  <section class="view" id="v-lab">
+    <div class="lab">
+      <div class="card">
+        <h3>提交文本做检测</h3>
+        <p class="sub">检测器给出分数与逐块分数，超过阈值的片段在原文里标红。
+          默认 <span class="mono" id="labDetName">tfidf-char</span>，它在 A1 全基线里召回最高，且不需要加载神经网络。</p>
+        <textarea id="labText" spellcheck="false" aria-label="待检测文本"></textarea>
+        <div class="row">
+          <button class="primary" id="btnDetect">检测</button>
+          <button id="btnSample">随机样本</button>
+          <button id="btnDeep">深度检测</button>
+          <label class="check"><input type="checkbox" id="chkNorm"> 先做输入规范化</label>
+        </div>
+      </div>
 
-<!-- ============ 审计链 ============ -->
-<section class="page" id="p-audit">
-  <div class="card">
-    <h3>哈希链校验</h3>
-    <p class="hint">每条检测记录都存着前一条的哈希，串成一条链。改动任何一条历史记录，后面的链就会断。</p>
-    <div class="row"><button class="primary" id="btnVerify">校验整条链</button></div>
-    <div id="auditOut" style="margin-top:12px"></div>
-  </div>
-  <div class="card">
-    <h3>数据库统计</h3>
-    <div id="statsOut">加载中…</div>
-  </div>
-</section>
+      <div class="card" id="labResult">
+        <div class="empty" id="labEmpty">左侧输入或点「随机样本」，结果会出现在这里。<br>
+          <span class="mono">Cmd / Ctrl + Enter</span> 也能直接检测。</div>
+        <div id="labBody" hidden>
+          <div class="vd">
+            <div>
+              <div class="chip" id="vdChip">—</div>
+              <div class="dim" style="font-size:12px;margin-top:6px" id="vdName"></div>
+            </div>
+            <div class="big" id="vdScore">—</div>
+          </div>
+          <div class="bar"><i id="vdBar"></i><em id="vdTick"></em></div>
+          <div class="meta" id="vdMeta"></div>
+          <div class="doc" id="vdDoc"></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-<footer>injlab · 本地运行 · 无外部依赖 · <span id="healthLine"></span></footer>
+  <!-- ========== 一键剧本 ========== -->
+  <section class="view" id="v-scenario">
+    <div class="card">
+      <h3>一键剧本</h3>
+      <p class="sub">顺序固定（正常 → 注入 → 绕过 → 加固 → 长文档 → 审计），
+        内容每次随机：良性问题、载荷、混淆方式都会变。seed 会显示出来，点「重放上一遍」能复现同一场。</p>
+      <div class="row">
+        <button class="primary" id="btnRun">跑一遍</button>
+        <button id="btnReplay">重放上一遍</button>
+        <span class="mono dim" id="seedTxt"></span>
+      </div>
+      <div class="tl" id="tl"></div>
+    </div>
+  </section>
+
+  <!-- ========== 攻击谱系 ========== -->
+  <section class="view" id="v-attacks">
+    <div class="card">
+      <h3>攻击谱系</h3>
+      <p class="sub">同一句载荷经过不同变换后的样子。「当前分数」是实时计算的，后面的数字是相对原始载荷的跌幅——
+        跌得越多说明这个变换越容易绕过它。点「试一下」会把攻击文本送进检测台。</p>
+      <div id="atkBox"><div class="empty">加载中…</div></div>
+    </div>
+  </section>
+
+  <!-- ========== 实验对比 ========== -->
+  <section class="view" id="v-exp">
+    <div class="banner" id="expBanner"></div>
+    <div class="charts">
+      <div class="card">
+        <h3>A1 全基线对比</h3>
+        <p class="sub">同一份数据、同一套攻击、同一个阈值口径。阈值只在训练集良性样本上校准，正样本标签不参与。</p>
+        <img class="chart" id="chartA1" alt="A1 全基线对比柱状图">
+      </div>
+      <div class="card">
+        <h3>攻击谱系鲁棒性</h3>
+        <p class="sub">格子里是 ASR*：只统计"改完人还读得懂"的攻击。n/a 表示该攻击下没有一条样本能通过意图保留判据。</p>
+        <img class="chart" id="chartAtk" alt="攻击谱系 ASR 热力图">
+      </div>
+    </div>
+    <div class="card" style="margin-top:var(--s5)">
+      <h3>运行记录</h3>
+      <p class="sub" id="expSub">加载中…</p>
+      <div id="expBox"></div>
+    </div>
+  </section>
+
+  <!-- ========== 审计链 ========== -->
+  <section class="view" id="v-audit">
+    <div class="card">
+      <h3>哈希链校验</h3>
+      <p class="sub">每条检测记录都存着前一条的哈希，串成一条链。改动任何一条历史记录，它后面的链就会断——
+        这是"事后能证明日志没被改过"的最小实现。</p>
+      <div class="row">
+        <button class="primary" id="btnVerify">校验整条链</button>
+        <span id="auditOut"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>数据库统计</h3>
+      <p class="sub">每次检测、每次实验都会落库；这张表是整条链路真的在写证据的证明。</p>
+      <div class="stats" id="statsBox"></div>
+    </div>
+  </section>
 </main>
+
+<footer>injlab · 本地运行 · 无外部依赖 · 检测器 <span id="ftDet">3</span> 个在线</footer>
 
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-const $$ = s => [...document.querySelectorAll(s)];
-const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const pct = v => (v==null||isNaN(v)) ? "—" : (v*100).toFixed(1)+"%";
-const num = v => (v==null||isNaN(v)) ? "—" : (+v).toFixed(3);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const QS = new URLSearchParams(location.search);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const px = n => (typeof n === "number" ? n.toFixed(3) : "—");
+const f3 = n => (typeof n === "number" ? n.toFixed(3) : "—");
 
-/* ---------- 主题 ---------- */
-const themeBtn = $("#themeBtn");
+async function jget(url){
+  const r = await fetch(url, {cache:"no-store"});
+  if (!r.ok) throw new Error(url + " → HTTP " + r.status);
+  return r.json();
+}
+async function jpost(url, body){
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || (url + " → HTTP " + r.status));
+  return j;
+}
+
+/* ---------------- 主题 ---------------- */
 function setTheme(t){
   document.documentElement.dataset.theme = t;
-  try{localStorage.setItem("injlab.theme", t)}catch(e){}
-  themeBtn.textContent = t === "dark" ? "◑ 浅色" : "◐ 深色";
+  $("#themeBtn").textContent = t === "dark" ? "☀ 浅色" : "◐ 深色";
+  try { localStorage.setItem("injlab-theme", t); } catch(e){}
 }
-const QS = new URLSearchParams(location.search);
-setTheme(QS.get("theme") || (() => { try { return localStorage.getItem("injlab.theme") || "light" } catch(e) { return "light" } })());
-themeBtn.onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+$("#themeBtn").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
-/* 打印模式：?print=1 去掉所有交互装饰 */
-if (new URLSearchParams(location.search).get("print") === "1") {
-  document.body.classList.add("print");
+/* ---------------- 页签 ---------------- */
+const LOADED = {};
+function showTab(tab){
+  $$("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  $$(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + tab));
+  const url = new URL(location.href);
+  url.searchParams.set("tab", tab);
+  history.replaceState(null, "", url);
+  window.scrollTo(0, 0);
+  if (tab === "lab" && !LOADED.lab){ LOADED.lab = 1; bootLab(); }
+  if (tab === "scenario" && !LOADED.scenario){ LOADED.scenario = 1; runScript(null); }
+  if (tab === "attacks" && !LOADED.attacks){ LOADED.attacks = 1; loadAttacks(); }
+  if (tab === "exp" && !LOADED.exp){ LOADED.exp = 1; loadExperiments(); }
+  if (tab === "audit") verifyChain();
 }
+$$("nav button").forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
+$("#goLab").onclick = () => showTab("lab");
+$("#goScript").onclick = () => showTab("scenario");
 
-/* ---------- 页签 ---------- */
-$$("nav button").forEach(b => b.onclick = () => {
-  $$("nav button").forEach(x => x.classList.toggle("on", x === b));
-  $$(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + b.dataset.tab));
-  if (b.dataset.tab === "attacks") loadAttacks();
-  if (b.dataset.tab === "exp") loadExperiments();
-  if (b.dataset.tab === "audit") { loadStats(); $("#btnVerify").click(); }
-  if (b.dataset.tab === "scenario" && !$("#scriptOut").children.length) runScript(null);
-});
-{ const t = QS.get("tab"); const b = t && $$("nav button").find(x => x.dataset.tab === t);
-  // 必须延后一拍：此刻下面的 onclick 还没赋值，直接 click() 什么都不会发生
-  if (b) setTimeout(() => b.click(), 0); }
+/* ---------------- 全局状态 ---------------- */
+const ST = {det:"tfidf-char", detectors:[], deep:[]};
 
-/* ---------- 健康检查 ---------- */
-async function jget(u){ const r = await fetch(u); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || r.status); return r.json(); }
-async function jpost(u, body){ const r = await fetch(u, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); const j = await r.json().catch(()=>({detail:r.status})); if(!r.ok) throw new Error(j.detail||r.status); return j; }
+async function boot(){
+  setTheme(QS.get("theme") || (localStorage.getItem("injlab-theme") || "light"));
+  if (QS.get("print") === "1") document.body.classList.add("print");
 
-jget("/health").then(h => {
-  $("#detSel").innerHTML = [...h.detectors, ...h.deep].map(d =>
-    `<option value="${d}" ${d===h.default?"selected":""}>${d}${h.deep.includes(d)?"（深度，约10秒）":""}</option>`).join("");
-  $("#healthLine").textContent = `检测器 ${h.detectors.length} 个在线 · 默认 ${h.default}`;
-}).catch(e => { $("#healthLine").textContent = "服务未连接"; });
+  try {
+    const h = await jget("/health");
+    ST.detectors = h.detectors || [];
+    ST.deep = h.deep || [];
+    ST.det = h.default || ST.det;
+    $("#detSel").innerHTML = ST.detectors
+      .map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+    $("#detSel").value = ST.det;
+    $("#labDetName").textContent = ST.det;
+    $("#ftDet").textContent = ST.detectors.length;
+    $("#tDet").textContent = ST.detectors.length + ST.deep.length;
+  } catch (e) { console.warn(e); }
 
-/* ---------- 检测台 ---------- */
-let lastResult = null;
+  $("#detSel").onchange = e => {
+    ST.det = e.target.value;
+    $("#labDetName").textContent = ST.det;
+    if (LOADED.attacks) loadAttacks();
+    if ($("#labBody") && !$("#labBody").hidden) doDetect();
+  };
 
-function renderDetect(r, text){
-  const color = r.pred === "malicious" ? "var(--red)" : "var(--green)";
-  let hl = esc(text);
-  if (r.chunks && r.chunks.length){
-    const hot = r.chunks.filter(c => c.score > r.threshold);
-    if (hot.length){
-      // 从后往前插，避免前面插入的标签改变后面位置
-      const parts = [];
-      let pos = 0;
-      hot.sort((a,b)=>a.start-b.start).forEach(c => {
-        if (c.start < pos) return;
-        parts.push(esc(text.slice(pos, c.start)));
-        parts.push(`<span class="hl" title="分数 ${c.score.toFixed(3)}">${esc(text.slice(c.start, c.end))}</span>`);
-        pos = c.end;
-      });
-      parts.push(esc(text.slice(pos)));
-      hl = parts.join("");
-    }
-  }
-  $("#out").innerHTML = `
-    <div class="card" style="margin-top:14px;background:var(--bg)">
-      <div class="row" style="justify-content:space-between">
-        <div>
-          <span class="badge ${r.pred==='malicious'?'bad':'ok'}">${r.pred==='malicious'?'判定：恶意':'判定：良性'}</span>
-          <span class="mono" style="margin-left:8px;color:var(--ink2)">${esc(r.detector)}${r.normalized?' · 已规范化':''}</span>
-          ${r.cold_start?'<span class="badge warn" style="margin-left:8px">冷启动</span>':''}
-        </div>
-        <div class="mono" style="font-size:20px;font-weight:650;color:${color}">${r.score.toFixed(4)}</div>
-      </div>
-      <div class="bar" style="position:relative"><i style="width:${Math.min(100,r.score*100)}%;background:${color}"></i>
-        <span style="position:absolute;left:${Math.min(100,r.threshold*100)}%;top:-3px;width:2px;height:15px;background:var(--ink2);opacity:.55" title="阈值 ${r.threshold.toFixed(3)}"></span>
-      </div>
-      <div class="kv">
-        <span>阈值 <b>${r.threshold.toFixed(3)}</b></span>
-        <span>词数 <b>${r.n_words}</b></span>
-        ${r.naive_truncated_score!=null && r.n_words>512?`<span>朴素截断(512词) <b>${r.naive_truncated_score.toFixed(3)}</b></span>`:""}
-        ${r.chunks&&r.chunks.length?`<span>命中片段 <b>${r.chunks.length}</b></span><span>最高块 <b>${r.max_chunk_score.toFixed(3)}</b></span>`:""}
-        ${r.sentence_max_score?`<span>句级最高 <b>${r.sentence_max_score.toFixed(3)}</b></span>`:""}
-      </div>
-      <div class="doc" style="margin-top:12px">${hl}</div>
-      ${r.chunks&&r.chunks.length?`
-        <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--ink2);font-size:12.5px">逐块分数</summary>
-          <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
-            ${r.chunks.map((c,i)=>`<span class="badge ${c.score>r.threshold?'bad':'mute'}" title="字符 ${c.start}–${c.end}">块${i+1}: ${c.score.toFixed(2)}</span>`).join("")}
-          </div>
-        </details>`:""}
-    </div>`;
-}
-
-async function doDetect(force){
-  const text = $("#input").value.trim();
-  if (!text) return;
-  const btn = $("#btnDetect");
-  const old = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = `<span class="spin"></span> 检测中`;
-  try{
-    const r = await jpost("/detect", {text, detector: $("#detSel").value,
-      normalize: $("#normChk").checked});
-    lastResult = r; renderDetect(r, text);
-  }catch(e){
-    $("#out").innerHTML = `<div class="card" style="margin-top:14px;background:var(--red2);color:var(--red)">${esc(e.message)}</div>`;
-  }finally{ btn.disabled = false; btn.innerHTML = old; }
-}
-
-/* 两族对比：同一段文本，轻量模型（TF-IDF）与神经模型（DistilBERT）各判一次。
-   安全分析员真正要看的不是"某个模型说了什么"，而是"两个不同原理的模型是不是
-   都这么认为"——只靠一个模型下结论，恰恰是被评委批的那类做法。 */
-async function doCompare(){
-  const text = $("#input").value.trim();
-  if (!text) return;
-  const btn = $("#btnCompare"), old = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = `<span class="spin"></span> 第二个模型加载中…`;
-  const norm = $("#normChk").checked;
-  const sel = $("#detSel").value;
-  const light = ["keyword","tfidf-word","tfidf-char"].includes(sel) ? sel : "tfidf-char";
-  try{
-    const a = await jpost("/detect", {text, detector: light, normalize: norm});
-    renderDetect(a, text);
-    const b = await jpost("/detect", {text, detector: "distilbert", normalize: norm});
-    const color = b.pred === "malicious" ? "var(--red)" : "var(--green)";
-    $("#out").insertAdjacentHTML("beforeend", `
-      <div class="card" style="background:var(--bg)">
-        <div class="row" style="justify-content:space-between">
-          <div><span class="badge ${b.pred==='malicious'?'bad':'ok'}">${b.pred==='malicious'?'判定：恶意':'判定：良性'}</span>
-            <span class="mono" style="margin-left:8px;color:var(--ink2)">${esc(b.detector)}（子进程）</span></div>
-          <div class="mono" style="font-size:20px;font-weight:650;color:${color}">${b.score.toFixed(4)}</div>
-        </div>
-        <div class="bar"><i style="width:${Math.min(100,b.score*100)}%;background:${color}"></i></div>
-        <div class="kv"><span>与上一个检测器结论<b>${a.pred===b.pred?'一致':'不一致'}</b></span>
-          <span>阈值 <b>${b.threshold.toFixed(3)}</b>（该模型自带二分类，未在训练集上重标定）</span></div>
-      </div>`);
-  }catch(e){
-    $("#out").insertAdjacentHTML("beforeend",
-      `<div class="card" style="background:var(--red2);color:var(--red)">${esc(e.message)}</div>`);
-  }finally{ btn.disabled = false; btn.innerHTML = old; }
-}
-$("#btnDetect").onclick = () => doDetect(false);
-$("#btnCompare").onclick = doCompare;
-$("#btnRand").onclick = async () => {
-  const j = await jget("/samples/random?n=1");
-  if (j.samples.length){ $("#input").value = j.samples[0].text; }
-};
-
-/* ---------- 攻击谱系 ---------- */
-async function loadAttacks(){
-  const j = await jget("/attacks");
-  $("#atkOut").innerHTML = `<table><thead><tr><th>名称</th><th>族</th><th>说明</th>
-      <th>变换后的样子</th><th class="num">当前分数</th><th></th></tr></thead><tbody>
-    ${j.attacks.map(a => `<tr>
-      <td class="mono" style="white-space:nowrap">${esc(a.name)}</td>
-      <td><span class="badge mute">${esc(a.family)}</span></td>
-      <td style="color:var(--ink2);font-size:12.5px">${esc(a.description)}</td>
-      <td class="mono" style="max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-          title="${esc(a.example)}">${esc(a.example)}</td>
-      <td class="num mono" data-score="${esc(a.name)}" style="white-space:nowrap">…</td>
-      <td style="white-space:nowrap"><button data-try="${esc(a.name)}">试一下</button></td>
-    </tr>`).join("")}</tbody></table>
-    <p class="hint" style="margin-top:10px">分数列用当前检测器（<span class="mono">${esc($("#detSel").value || "默认")}</span>）实时算；红字是和 identity 的差值，跌得越多说明这个变换越能绕过它。</p>`;
-
-  // 逐个算分：identity 当基线，其余算差值。5 次请求，tfidf 上总共几十毫秒。
-  const baseName = j.attacks.some(a => a.name === "identity") ? "identity" : j.attacks[0].name;
-  let base = null;
-  for (const a of j.attacks){
-    try{
-      const r = await jpost("/detect", {text: a.example});
-      if (a.name === baseName) base = r.score;
-      const cell = document.querySelector(`[data-score="${a.name}"]`);
-      if (!cell) continue;
-      const cls = r.score > r.threshold ? "bad" : "ok";
-      let extra = "";
-      if (base != null && base - r.score > 0.01){
-        extra = ` <span style="color:var(--red);font-size:11.5px">${(r.score-base).toFixed(2)}</span>`;
-      }
-      cell.innerHTML = `<span class="badge ${cls}">${r.score.toFixed(3)}</span>${extra}`;
-    }catch(e){ }
-  }
-
-  $$("[data-try]").forEach(b => b.onclick = () => {
-    const a = j.attacks.find(x => x.name === b.dataset.try);
-    $("#input").value = a.example;
-    $$("nav button").forEach(x => x.classList.toggle("on", x.dataset.tab === "lab"));
-    $$(".page").forEach(p => p.classList.toggle("on", p.id === "p-lab"));
-    doDetect(false);
-  });
-}
-
-/* ---------- 实验：手绘 SVG 柱状图 ----------
-   为什么不用图表库：整个前端是单文件、零外链、断网可用。用 div/SVG 手绘
-   60 行就够，换来 hover 提示和实时刷新，比一张死 PNG 强。PNG 仍然保留，
-   因为论文里要的是静态图。 */
-let A1ROWS = [];
-async function loadA1(){
-  try{
-    const j = await jget("/a1");
-    A1ROWS = j.rows;
-    drawA1();
-    $("#a1Meta").innerHTML = `<span>数据来源 <b class="mono">${esc(j.source)}</b></span>
-      <span>负样本 N=<b>${A1ROWS[0]?.n_benign ?? "—"}</b></span>
-      <span>阈值口径 <b>训练集良性分位数（FPR 目标 1%）</b></span>`;
-  }catch(e){ $("#svgA1").innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
-}
-
-function drawA1(){
-  const rows = A1ROWS;
-  if (!rows.length) return;
-  const W = 900, H = 340, L = 52, R = 16, T = 16, B = 52;
-  const iw = W - L - R, ih = H - T - B;
-  const y = v => T + ih * (1 - v);
-  let g = "";
-  for (let i = 0; i <= 5; i++){
-    const v = i / 5, yy = y(v);
-    g += `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" stroke="var(--line)" stroke-width="1"/>`;
-    g += `<text x="${L - 10}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--ink3)">${v.toFixed(1)}</text>`;
-  }
-  const gw = iw / rows.length, bw = Math.min(38, gw / 3.4);
-  let bars = "";
-  rows.forEach((r, i) => {
-    const cx = L + gw * (i + 0.5);
-    const x1 = cx - bw - 2, x2 = cx + 2;
-    bars += `<g data-i="${i}" style="cursor:pointer">
-      <rect class="bar-rect" x="${x1}" y="${y(r.tpr||0)}" width="${bw}" height="${ih*(r.tpr||0)}" rx="2" fill="var(--blue)"/>
-      <rect class="bar-rect" x="${x2}" y="${y(r.tpr10||0)}" width="${bw}" height="${ih*(r.tpr10||0)}" rx="2" fill="var(--blue)" opacity=".45"/>
-      <text x="${x1 + bw/2}" y="${y(r.tpr||0) - 6}" text-anchor="middle" font-size="10.5" fill="var(--ink2)">${(r.tpr??0).toFixed(2)}</text>
-      <text x="${cx}" y="${H - 30}" text-anchor="middle" font-size="11.5" fill="var(--ink)">${esc(r.detector)}</text>
-      <g class="hoverzone"></g>
-      <rect x="${cx - gw/2}" y="${T}" width="${gw}" height="${ih}" fill="transparent"/>
-    </g>`;
-  });
-  const legend = `<g font-size="11" fill="var(--ink2)">
-      <rect x="${L}" y="${T - 2}" width="10" height="10" rx="2" fill="var(--blue)"/><text x="${L + 15}" y="${T + 7}">TPR @ FPR=1%</text>
-      <rect x="${L + 110}" y="${T - 2}" width="10" height="10" rx="2" fill="var(--blue)" opacity=".45"/><text x="${L + 125}" y="${T + 7}">TPR @ FPR=10%</text>
-    </g>`;
-  $("#svgA1").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="A1 全基线对比">
-      ${g}${bars}${legend}
-      <line x1="${L}" y1="${y(0)}" x2="${W - R}" y2="${y(0)}" stroke="var(--ink3)" stroke-width="1"/>
-    </svg><div class="tip" id="a1Tip"></div>`;
-  const tip = $("#a1Tip"), box = $("#svgA1");
-  box.querySelectorAll("g[data-i]").forEach(el => {
-    el.onmousemove = ev => {
-      const r = rows[+el.dataset.i];
-      tip.innerHTML = `<b>${esc(r.detector)}</b><br>TPR@1% ${(r.tpr??0).toFixed(3)} · TPR@10% ${(r.tpr10??0).toFixed(3)}<br>
-        AUC ${num(r.auc)} · FPR ${(r.fpr??0).toFixed(3)} · F1 ${num(r.f1)}<br>延迟 ${num(r.latency_ms)} ms`;
-      tip.classList.add("on");
-      const b = box.getBoundingClientRect();
-      tip.style.left = Math.min(ev.clientX - b.left + 14, b.width - 210) + "px";
-      tip.style.top = (ev.clientY - b.top - 10) + "px";
-    };
-    el.onmouseleave = () => tip.classList.remove("on");
-  });
-}
-
-async function loadExperiments(){
-  loadA1();
-  $("#chartA1").src = "/chart/a1_tpr?" + Date.now();
-  $("#chartAtk").src = "/chart/attack_asr?" + Date.now();
-  try{
-    const j = await jget("/experiments");
-    $("#expOut").innerHTML = j.experiments.length ? `<table><thead><tr><th>运行</th><th>检测器</th><th class="num">TPR@FPR=1%</th><th class="num">AUC</th><th class="num">F1</th></tr></thead><tbody>
-      ${j.experiments.map(e => `<tr><td class="mono">${esc(e.name)}</td><td>${esc(e.detector||"—")}</td>
-        <td class="num">${num(e.tpr_at_fpr)}</td><td class="num">${num(e.auc)}</td><td class="num">${num(e.f1)}</td></tr>`).join("")}
-      </tbody></table><p class="hint" style="margin-top:10px">共 ${j.total} 次运行，只列最近 ${j.experiments.length} 次。注意：<span class="mono">demo_*</span> 是 91 条玩具数据上的冒烟运行，数字不能进论文；<span class="mono">*_a1</span> 才是真语料上的对比实验。</p>` : `<p class="hint">还没有运行记录，先跑一次 <span class="mono">python -m injlab a1</span>。</p>`;
-  }catch(e){ $("#expOut").textContent = e.message; }
-}
-
-/* ---------- 审计 ---------- */
-$("#btnVerify").onclick = async () => {
-  const t0 = performance.now();
-  try{
-    const j = await jget("/audit/verify");
-    $("#auditOut").innerHTML = `<span class="badge ok">链完整</span>
-      <span class="mono" style="margin-left:10px;color:var(--ink2)">${esc(j.detail)} · ${(performance.now()-t0).toFixed(0)}ms</span>`;
-  }catch(e){
-    $("#auditOut").innerHTML = `<span class="badge bad">校验失败</span>
-      <span class="mono" style="margin-left:10px;color:var(--red)">${esc(e.message)}</span>`;
-  }
-};
-async function loadStats(){
-  try{
+  try {
     const s = await jget("/stats");
-    const ZH = {sample:"样本", dataset_version:"数据集版本", attack:"攻击", attack_sample:"攻击样本",
-      detection_log:"检测记录", experiment_run:"实验运行", model_version:"模型版本", defense_policy:"防御策略"};
-    $("#statsOut").innerHTML = `<div class="row" style="gap:24px">` +
-      Object.entries(s).map(([k,v]) => `<div><div class="mono" style="font-size:19px;font-weight:650">${v}</div>
-        <div style="color:var(--ink3);font-size:12px">${esc(ZH[k]||k)}</div></div>`).join("") + `</div>`;
-  }catch(e){ $("#statsOut").textContent = e.message; }
+    const c = s.counts || s;
+    $("#tLog").textContent = c.detection_log ?? "—";
+    $("#tAtk").textContent = 5;
+    // 首页的数字取 A1 那次实验的规模，而不是随便一条 demo 运行
+    const a1 = await jget("/a1/summary");
+    if (a1.n_test) $("#tTest").textContent = a1.n_test;
+    if (a1.n_detectors) $("#tDet").textContent = a1.n_detectors;
+  } catch (e) { console.warn(e); }
+
+  const tab = QS.get("tab");
+  // 延后一拍：此刻各页签的 onclick 还未全部赋值
+  setTimeout(() => showTab(tab && $("#v-" + tab) ? tab : "home"), 0);
 }
 
-/* ---------- 一键剧本 ---------- */
+/* ---------------- 检测台 ---------------- */
+async function bootLab(){
+  // 首次进检测台时自动填一条真实样本并跑一次，避免"打开是空白"
+  try { await loadSample(); } catch (e) { console.warn(e); }
+}
+
+async function loadSample(){
+  const s = await jget("/samples/random?n=1");
+  const row = (s.samples || [])[0];
+  if (!row) return;
+  $("#labText").value = row.text;
+  doDetect();
+}
+$("#btnSample").onclick = () => loadSample().catch(e => alert("取样本失败：" + e.message));
+
+function markDoc(text, chunks, thr){
+  if (!chunks || !chunks.length) return esc(text);
+  const sorted = chunks.slice().sort((a,b) => a.start - b.start);
+  let out = "", cur = 0;
+  for (const c of sorted){
+    if (c.start < cur) continue;
+    out += esc(text.slice(cur, c.start));
+    const cls = c.score > thr ? "" : " class=\"warm\"";
+    out += `<mark${cls}>${esc(text.slice(c.start, c.end))}</mark>`;
+    cur = c.end;
+  }
+  out += esc(text.slice(cur));
+  return out;
+}
+
+function renderDetect(r){
+  $("#labEmpty").hidden = true;
+  $("#labBody").hidden = false;
+  const bad = r.pred === "malicious";
+  const chip = $("#vdChip");
+  chip.className = "chip " + (bad ? "bad" : "good");
+  chip.textContent = bad ? "判定：恶意 · 拦截" : "判定：良性 · 放行";
+  $("#vdName").textContent = ST.det + (r.cold_start ? " · 冷启动（模型正在加载，结果会偏慢）" : "");
+  $("#vdScore").textContent = px(r.score);
+  $("#vdScore").style.color = bad ? "var(--danger)" : "var(--ok)";
+  const bar = $("#vdBar");
+  bar.style.width = Math.min(100, r.score * 100) + "%";
+  bar.className = bad ? "bad" : "";
+  $("#vdTick").style.left = Math.min(100, r.threshold * 100) + "%";
+
+  const bits = [`阈值 ${px(r.threshold)}`];
+  if (r.n_words) bits.push(`词数 ${r.n_words}`);
+  if (r.max_chunk_score != null && r.chunks && r.chunks.length > 1) bits.push(`逐块最高 ${px(r.max_chunk_score)}`);
+  if (r.n_words > 512 && r.naive_truncated_score != null) bits.push(`朴素截断 ${px(r.naive_truncated_score)}`);
+  if (r.sentence_max_score != null && r.sentence_max_score > r.score) bits.push(`句级最高 ${px(r.sentence_max_score)}`);
+  $("#vdMeta").innerHTML = bits.map(b => `<span>${esc(b)}</span>`).join("");
+  $("#vdDoc").innerHTML = markDoc(r.text || $("#labText").value, r.chunks, r.threshold);
+  const card = $("#labResult");
+  card.classList.remove("appear");
+  void card.offsetWidth;
+  card.classList.add("appear");
+}
+
+async function doDetect(){
+  const text = $("#labText").value.trim();
+  if (!text) { alert("先输入点文本"); return; }
+  const btn = $("#btnDetect");
+  btn.disabled = true; btn.textContent = "检测中…";
+  try {
+    const r = await jpost("/detect", {
+      text, detector: ST.det, normalize: $("#chkNorm").checked,
+      chunk_size: 256, chunk_stride: 128
+    });
+    r.text = text;
+    renderDetect(r);
+  } catch (e) {
+    $("#labEmpty").hidden = true; $("#labBody").hidden = false;
+    $("#vdChip").className = "chip flat"; $("#vdChip").textContent = "出错";
+    $("#vdScore").textContent = "—";
+    $("#vdMeta").innerHTML = `<span>${esc(e.message)}</span>`;
+    $("#vdDoc").textContent = "";
+  } finally { btn.disabled = false; btn.textContent = "检测"; }
+}
+$("#btnDetect").onclick = doDetect;
+$("#btnDeep").onclick = async () => {
+  const prev = ST.det, deep = ST.deep[0];
+  if (!deep) { alert("没有可用的深度检测器"); return; }
+  ST.det = deep; $("#detSel").value = deep; $("#labDetName").textContent = deep;
+  await doDetect();
+  ST.det = prev; $("#detSel").value = prev; $("#labDetName").textContent = prev;
+};
+$("#labText").addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") doDetect();
+});
+
+/* ---------------- 一键剧本 ---------------- */
 let lastSeed = null;
 async function runScript(seed){
-  const btn = $("#btnPlay");
-  btn.disabled = true;
-  const old = btn.innerHTML; btn.innerHTML = `<span class="spin"></span> 执行中`;
-  try{
-    const j = await jget("/script" + (seed!=null?`?seed=${seed}`:""));
-    lastSeed = j.seed;
-    $("#seedBox").textContent = `seed = ${j.seed}`;
-    const box = $("#scriptOut");
-    box.innerHTML = j.steps.map(s => `<div class="step" id="st-${s.id}">
-        <div class="t">${esc(s.title)}</div>
-        <div class="n">${esc(s.note)}</div>
-        <div class="r mono" style="color:var(--ink3)">等待…</div>
-      </div>`).join("");
+  const btn = $("#btnRun");
+  btn.disabled = true; btn.textContent = "运行中…";
+  $("#tl").innerHTML = `<div class="empty">正在跑…</div>`;
+  try {
+    const sc = await jget("/script" + (seed ? "?seed=" + seed : ""));
+    lastSeed = sc.seed;
+    $("#seedTxt").textContent = "seed = " + sc.seed;
+    $("#tl").innerHTML = "";
+    for (const step of sc.steps){
+      const item = document.createElement("div");
+      item.className = "sitem appear";
+      item.innerHTML = `<div class="t">${esc(step.title)}</div>
+        <div class="n">${esc(step.note)}</div>
+        <div class="r"><span class="chip flat">检测中…</span></div>`;
+      $("#tl").appendChild(item);
+      await new Promise(r => setTimeout(r, 90));
 
-    for (const s of j.steps){
-      const el = $("#st-" + s.id);
-      const resEl = el.querySelector(".r");
-      try{
-        if (s.kind === "audit"){
-          const v = await jget("/audit/verify");
-          el.classList.add("pass");
-          resEl.innerHTML = `<span class="badge ok">通过</span> ${esc(v.detail)}`;
-          continue;
-        }
-        const r = await jpost("/detect", {text: s.text, normalize: !!s.normalize});
-        const blocked = r.pred === "malicious";
-        let verdict, cls;
-        if (s.kind === "benign"){ verdict = blocked ? "误报" : "放行"; cls = blocked ? "fail" : "pass"; }
-        else if (s.kind === "truncation"){
-          const naiveNo = (r.naive_truncated_score ?? 1) <= r.threshold;
-          const sYes = (r.sentence_max_score ?? 0) > r.threshold;
-          verdict = `朴素截断 ${naiveNo ? "漏检" : "检出"} / 句级扫描 ${sYes ? "检出" : "漏检"}`
-                  + `（整篇 ${r.score.toFixed(3)}，句级最高 ${(r.sentence_max_score??0).toFixed(3)}）`;
-          cls = (naiveNo && sYes) ? "pass" : "skip";
-        } else if (s.expect === "block_after_norm"){
-          verdict = blocked ? "规范化后拦住" : "仍未拦住"; cls = blocked ? "pass" : "fail";
-        } else if (s.kind === "zh"){
-          verdict = blocked ? "意外拦住了" : "漏检（英文训练集的已知缺口）";
-          cls = blocked ? "skip" : "fail";
-        } else if (s.kind === "obfuscate"){
-          verdict = blocked ? "没能绕过" : "成功绕过"; cls = blocked ? "skip" : "pass";
-        } else {
-          verdict = blocked ? "拦住" : "漏过"; cls = blocked ? "pass" : "fail";
-        }
-        el.classList.add(cls);
-        resEl.innerHTML = `<span class="badge ${blocked?'bad':'ok'}">${blocked?'恶意':'良性'}</span>
-          <span class="mono" style="margin-left:8px">分数 ${r.score.toFixed(3)} / 阈值 ${r.threshold.toFixed(3)}</span>
-          <span style="margin-left:10px;color:var(--ink2)">${verdict}</span>`;
-      }catch(e){
-        el.classList.add("fail"); resEl.textContent = "出错：" + e.message;
+      let r;
+      try {
+        r = await jpost("/detect", {
+          text: step.text, detector: ST.det,
+          normalize: step.kind === "defense",
+          chunk_size: 256, chunk_stride: 128
+        });
+      } catch (e) {
+        item.querySelector(".r").innerHTML = `<span class="chip flat">${esc(e.message)}</span>`;
+        continue;
       }
-    }
-  }catch(e){
-    $("#scriptOut").innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`;
-  }finally{ btn.disabled = false; btn.innerHTML = old; }
-}
-$("#btnPlay").onclick = () => runScript(null);
-$("#btnReplay").onclick = () => runScript(lastSeed);
+      const blocked = r.pred === "malicious";
+      let label, cls;
+      if (step.expect === "allow"){ label = blocked ? "误报 · 被拦" : "良性 · 放行"; cls = blocked ? "bad" : "ok"; }
+      else if (step.expect === "bypass"){ label = blocked ? "没绕过 · 被拦" : "绕过成功"; cls = blocked ? "ok" : "bad"; }
+      else { label = blocked ? "恶意 · 拦住" : "漏检 · 放过"; cls = blocked ? "ok" : "bad"; }
+      item.classList.add(cls);
 
-/* ---------- 启动 ---------- */
-jget("/samples/random?n=1").then(j => {
-  if (j.samples.length && !$("#input").value) $("#input").value = j.samples[0].text;
-}).catch(()=>{}).then(() => {
-  // 首屏自动检测一次：页面一打开就有结果，不留空白
-  if ($("#input").value && $("#p-lab").classList.contains("on")) doDetect(false);
-});
-loadStats();
+      const tone = cls === "ok" ? "good" : "bad";
+      const bits = [`<span class="chip ${tone}">${esc(label)}</span>`,
+        `<span class="mono dim">分数 ${px(r.score)} / 阈值 ${px(r.threshold)}</span>`];
+      if (r.n_words > 512 && r.naive_truncated_score != null)
+        bits.push(`<span class="mono dim">朴素截断 ${px(r.naive_truncated_score)}</span>`);
+      if (r.n_words > 512 && r.sentence_max_score != null && r.max_chunk_score != null)
+        bits.push(`<span class="mono dim">分块 ${px(r.max_chunk_score)} · 句级 ${px(r.sentence_max_score)}</span>`);
+      item.querySelector(".r").innerHTML = bits.join("");
+    }
+  } catch (e) {
+    $("#tl").innerHTML = `<div class="empty">跑失败：${esc(e.message)}</div>`;
+  } finally { btn.disabled = false; btn.textContent = "跑一遍"; }
+}
+$("#btnRun").onclick = () => runScript(null);
+$("#btnReplay").onclick = () => {
+  if (!lastSeed) { alert("还没有跑过，先点「跑一遍」"); return; }
+  runScript(lastSeed);
+};
+
+/* ---------------- 攻击谱系 ---------------- */
+async function loadAttacks(){
+  const box = $("#atkBox");
+  box.innerHTML = `<div class="empty">加载中…</div>`;
+  try {
+    const a = await jget("/attacks");
+    const rows = a.attacks || [];
+    const scores = {};
+    for (const r of rows){
+      try {
+        const d = await jpost("/detect", {text: r.example, detector: ST.det, normalize:false});
+        scores[r.name] = d.score;
+      } catch (e) { scores[r.name] = null; }
+    }
+    const base = scores[rows[0] && rows[0].name];
+    box.innerHTML = `<table><thead><tr>
+        <th>名称</th><th>族</th><th>说明</th><th>变换后的样子</th>
+        <th class="num">当前分数</th><th></th></tr></thead><tbody>
+      ${rows.map(r => {
+        const s = scores[r.name];
+        const d = (s != null && base != null) ? s - base : null;
+        const sc = s == null ? "—" : px(s);
+        const dtext = (d == null || r.name === (rows[0] && rows[0].name)) ? ""
+          : `<span class="delta">${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(3)}</span>`;
+        return `<tr>
+          <td class="mono">${esc(r.name)}</td>
+          <td><span class="tag">${esc(r.family)}</span></td>
+          <td style="font-size:12.5px;color:var(--muted);max-width:280px">${esc(r.description)}</td>
+          <td class="mono" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.example)}</td>
+          <td class="num"><span class="sc ${s > 0.5 ? "bad" : "good"}">${sc}</span>${dtext}</td>
+          <td style="white-space:nowrap"><button data-atk="${esc(r.name)}">试一下</button></td>
+        </tr>`;
+      }).join("")}
+      </tbody></table>
+      <p class="sub" style="margin-top:var(--s3)">分数由当前选中的检测器（<span class="mono">${esc(ST.det)}</span>）实时计算；
+        后面的数字是相对原始载荷的差值，跌得越多说明这个变换越容易绕过它。</p>`;
+    box.querySelectorAll("button[data-atk]").forEach(b => {
+      b.onclick = () => {
+        const row = rows.find(x => x.name === b.dataset.atk);
+        if (!row) return;
+        showTab("lab");
+        $("#labText").value = row.example;
+        $("#chkNorm").checked = false;
+        doDetect();
+      };
+    });
+  } catch (e) {
+    box.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------------- 实验对比 ---------------- */
+async function loadExperiments(){
+  $("#chartA1").src = "/chart/a1_tpr?t=" + Date.now();
+  $("#chartAtk").src = "/chart/attack_asr?t=" + Date.now();
+  const box = $("#expBox");
+  box.innerHTML = `<div class="empty">加载中…</div>`;
+  try {
+    const d = await jget("/experiments");
+    const rows = d.experiments || [];
+    const real = rows.filter(r => r.n_test > 20);
+    const show = real.length ? real : rows.slice(0, 15);
+    $("#expSub").textContent = `最近 ${rows.length} 条运行，其中 ${real.length} 条是在留出集上跑的（玩具数据的冒烟运行不列）。`;
+    box.innerHTML = `<table><thead><tr>
+      <th>运行</th><th>检测器</th><th class="num">训练/测试</th>
+      <th class="num">TPR@FPR=1%</th><th class="num">AUC</th><th class="num">F1</th></tr></thead><tbody>
+      ${show.map(r => `<tr>
+        <td class="mono" style="font-size:12px">${esc(r.name)}</td>
+        <td><span class="tag">${esc(r.detector || "—")}</span></td>
+        <td class="num dim">${r.n_train ?? "—"} / ${r.n_test ?? "—"}</td>
+        <td class="num"><span class="sc">${f3(r.tpr_at_fpr)}</span></td>
+        <td class="num"><span class="sc">${f3(r.auc)}</span></td>
+        <td class="num dim">${f3(r.f1)}</td></tr>`).join("")}
+      </tbody></table>`;
+    if (!real.length){
+      $("#expBanner").className = "banner on";
+      $("#expBanner").textContent = "目前只有玩具数据上的冒烟运行，还没有留出集规模的实验。";
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------------- 审计链 ---------------- */
+const ZH = {sample:"样本", dataset_version:"数据集版本", attack:"攻击", attack_sample:"攻击样本",
+  detection_log:"检测记录", experiment_run:"实验运行", model_version:"模型版本", defense_policy:"防御策略"};
+
+async function verifyChain(){
+  const out = $("#auditOut");
+  out.innerHTML = `<span class="chip flat">校验中…</span>`;
+  try {
+    const t0 = performance.now();
+    const r = await jget("/audit/verify");
+    const ms = Math.round(performance.now() - t0);
+    out.innerHTML = `<span class="chip ${r.ok ? "good" : "bad"}">${r.ok ? "链完整" : "链已损坏"}</span>
+      <span class="mono dim" style="margin-left:8px">${esc(r.detail || "")} · ${ms}ms</span>`;
+  } catch (e) {
+    out.innerHTML = `<span class="chip bad">校验失败</span><span class="mono dim">${esc(e.message)}</span>`;
+  }
+  try {
+    const s = await jget("/stats");
+    const c = s.counts || s;
+    $("#statsBox").innerHTML = Object.entries(c).map(([k,v]) =>
+      `<div class="stat"><div class="n">${v}</div><div class="k">${esc(ZH[k] || k)}</div></div>`).join("");
+  } catch (e) { /* 忽略 */ }
+}
+$("#btnVerify").onclick = verifyChain;
+
+boot();
 </script>
 </body>
 </html>

@@ -293,6 +293,25 @@ def a1_report() -> dict[str, Any]:
             "dataset": rep.get("dataset_dir", "")}
 
 
+@app.get("/a1/summary")
+def a1_summary() -> dict[str, Any]:
+    """首页那几个数字用：A1 那次实验的规模。"""
+    from injlab.web.charts import latest_a1
+
+    rep = latest_a1("runs")
+    if not rep:
+        raise HTTPException(status_code=404, detail="还没有 A1 结果，先跑 python -m injlab a1")
+    ok = [r for r in rep.get("results", []) if r.get("status") == "ok"]
+    return {
+        "dataset": rep.get("dataset"),
+        "n_train": rep.get("n_train"),
+        "n_test": rep.get("n_test"),
+        "label_counts": rep.get("label_counts"),
+        "n_detectors": len(ok),
+        "detectors": [r["detector"] for r in ok],
+    }
+
+
 @app.get("/chart/{name}")
 def chart(name: str) -> FileResponse:
     p = (ROOT / "data" / "charts" / f"{name}.png").resolve()
