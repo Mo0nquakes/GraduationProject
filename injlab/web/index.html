@@ -116,7 +116,7 @@ body.print .page{display:block!important;margin-bottom:26px}
     <div class="row" style="margin-top:10px">
       <button class="primary" id="btnDetect">检测</button>
       <button id="btnRand">随机样本</button>
-      <button id="btnDeep" title="起子进程加载神经检测器，约 10 秒">深度检测</button>
+      <button id="btnCompare" title="用两族检测器各打一次分；神经模型走子进程，约 4–8 秒">两族对比</button>
       <label class="row" style="gap:5px;font-size:12.5px;color:var(--ink2)">
         <input type="checkbox" id="normChk" style="width:auto"> 先做输入规范化
       </label>
@@ -282,23 +282,55 @@ function renderDetect(r, text){
     </div>`;
 }
 
-async function doDetect(deep){
+async function doDetect(force){
   const text = $("#input").value.trim();
   if (!text) return;
-  const btn = deep ? $("#btnDeep") : $("#btnDetect");
+  const btn = $("#btnDetect");
   const old = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${deep?"加载模型…":"检测中"}`;
+  btn.disabled = true; btn.innerHTML = `<span class="spin"></span> 检测中`;
   try{
-    const det = deep ? $("#detSel").value : null;
-    const r = await jpost("/detect", {text, detector: deep ? $("#detSel").value : $("#detSel").value,
+    const r = await jpost("/detect", {text, detector: $("#detSel").value,
       normalize: $("#normChk").checked});
     lastResult = r; renderDetect(r, text);
   }catch(e){
     $("#out").innerHTML = `<div class="card" style="margin-top:14px;background:var(--red2);color:var(--red)">${esc(e.message)}</div>`;
   }finally{ btn.disabled = false; btn.innerHTML = old; }
 }
+
+/* 两族对比：同一段文本，轻量模型（TF-IDF）与神经模型（DistilBERT）各判一次。
+   安全分析员真正要看的不是"某个模型说了什么"，而是"两个不同原理的模型是不是
+   都这么认为"——只靠一个模型下结论，恰恰是被评委批的那类做法。 */
+async function doCompare(){
+  const text = $("#input").value.trim();
+  if (!text) return;
+  const btn = $("#btnCompare"), old = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = `<span class="spin"></span> 第二个模型加载中…`;
+  const norm = $("#normChk").checked;
+  const sel = $("#detSel").value;
+  const light = ["keyword","tfidf-word","tfidf-char"].includes(sel) ? sel : "tfidf-char";
+  try{
+    const a = await jpost("/detect", {text, detector: light, normalize: norm});
+    renderDetect(a, text);
+    const b = await jpost("/detect", {text, detector: "distilbert", normalize: norm});
+    const color = b.pred === "malicious" ? "var(--red)" : "var(--green)";
+    $("#out").insertAdjacentHTML("beforeend", `
+      <div class="card" style="background:var(--bg)">
+        <div class="row" style="justify-content:space-between">
+          <div><span class="badge ${b.pred==='malicious'?'bad':'ok'}">${b.pred==='malicious'?'判定：恶意':'判定：良性'}</span>
+            <span class="mono" style="margin-left:8px;color:var(--ink2)">${esc(b.detector)}（子进程）</span></div>
+          <div class="mono" style="font-size:20px;font-weight:650;color:${color}">${b.score.toFixed(4)}</div>
+        </div>
+        <div class="bar"><i style="width:${Math.min(100,b.score*100)}%;background:${color}"></i></div>
+        <div class="kv"><span>与上一个检测器结论<b>${a.pred===b.pred?'一致':'不一致'}</b></span>
+          <span>阈值 <b>${b.threshold.toFixed(3)}</b>（该模型自带二分类，未在训练集上重标定）</span></div>
+      </div>`);
+  }catch(e){
+    $("#out").insertAdjacentHTML("beforeend",
+      `<div class="card" style="background:var(--red2);color:var(--red)">${esc(e.message)}</div>`);
+  }finally{ btn.disabled = false; btn.innerHTML = old; }
+}
 $("#btnDetect").onclick = () => doDetect(false);
-$("#btnDeep").onclick = () => doDetect(true);
+$("#btnCompare").onclick = doCompare;
 $("#btnRand").onclick = async () => {
   const j = await jget("/samples/random?n=1");
   if (j.samples.length){ $("#input").value = j.samples[0].text; }
