@@ -261,7 +261,11 @@ def cmd_a1(args: argparse.Namespace) -> int:
     print(f"[a1] 数据: {d}")
     dets = args.detectors.split(",") if args.detectors else list(DEFAULT_DETECTORS)
     print(f"[a1] 检测器: {', '.join(dets)}")
-    run_a1(cfg, d, detectors=dets)
+    seed = getattr(args, "seed", None)
+    if seed is not None:
+        cfg.seed = seed
+        print(f"[a1] 种子: {seed}")
+    run_a1(cfg, d, detectors=dets, seed=seed)
     return 0
 
 
@@ -338,6 +342,8 @@ def build_parser() -> argparse.ArgumentParser:
     a1 = sub.add_parser("a1", help="A1 全基线对比（真数据，一张表）")
     a1.add_argument("--data", default=None, help="data/processed/<目录>，默认取最新")
     a1.add_argument("--detectors", default=None, help="逗号分隔，默认全部")
+    a1.add_argument("--seed", type=int, default=None,
+                    help="随机种子（只对神经网络检测器有意义）")
     a1.set_defaults(func=cmd_a1)
 
     v = sub.add_parser("verify", help="校验检测日志的哈希链")

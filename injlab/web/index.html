@@ -417,6 +417,18 @@ $("#goScript").onclick = () => showTab("scenario");
 /* ---------------- 全局状态 ---------------- */
 const ST = {det:"tfidf-char", detectors:[], deep:[]};
 
+/** 切换检测器。下拉框里没有的名字一律回退到第一个可用项——
+ *  否则 <select>.value = "guardrail"（不在 option 列表里）会把 selectedIndex 设成 -1，
+ *  下拉框显示成空白，看起来就像"内容没了"。（这就是深度检测按钮原来的 bug） */
+function setDet(name){
+  const all = Array.from($("#detSel").options).map(o => o.value);
+  if (!all.length) return;
+  if (!all.includes(name)) name = all[0];
+  ST.det = name;
+  $("#detSel").value = name;
+  $("#labDetName").textContent = name;
+}
+
 async function boot(){
   setTheme(QS.get("theme") || (localStorage.getItem("injlab-theme") || "light"));
   if (QS.get("print") === "1") document.body.classList.add("print");
@@ -426,17 +438,24 @@ async function boot(){
     ST.detectors = h.detectors || [];
     ST.deep = h.deep || [];
     ST.det = h.default || ST.det;
-    $("#detSel").innerHTML = ST.detectors
-      .map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
-    $("#detSel").value = ST.det;
-    $("#labDetName").textContent = ST.det;
+    const opt = n => `<option value="${esc(n)}">${esc(n)}</option>`;
+    $("#detSel").innerHTML = [
+      ST.detectors.length ? `<optgroup label="轻量检测器">${ST.detectors.map(opt).join("")}</optgroup>` : "",
+      ST.deep.length ? `<optgroup label="神经网络（首次加载慢）">${ST.deep.map(opt).join("")}</optgroup>` : ""
+    ].join("");
+    // ?detector=guardrail 这种深链也要能用
+    setDet(QS.get("detector") || ST.det);
     $("#ftDet").textContent = ST.detectors.length;
     $("#tDet").textContent = ST.detectors.length + ST.deep.length;
-  } catch (e) { console.warn(e); }
+  } catch (e) {
+    // /health 挂了也不能让下拉框是个空壳——留一个占位项，至少看得出是"没连上"
+    console.warn(e);
+    $("#detSel").innerHTML = `<option value="tfidf-char">连不上后端</option>`;
+    ST.det = "tfidf-char";
+  }
 
   $("#detSel").onchange = e => {
-    ST.det = e.target.value;
-    $("#labDetName").textContent = ST.det;
+    setDet(e.target.value);
     if (LOADED.attacks) loadAttacks();
     if ($("#labBody") && !$("#labBody").hidden) doDetect();
   };
@@ -519,6 +538,16 @@ async function doDetect(){
   const text = $("#labText").value.trim();
   if (!text) { alert("先输入点文本"); return; }
   const btn = $("#btnDetect");
+  const deep = ST.deep.includes(ST.det);
+  if (deep){
+    // 首次要把模型权重读进内存，几十秒内没有结果——先占住结果区
+    $("#labEmpty").hidden = true; $("#labBody").hidden = false;
+    $("#vdChip").className = "chip flat";
+    $("#vdChip").textContent = "计算中…";
+    $("#vdScore").textContent = "…";
+    $("#vdMeta").innerHTML = `<span>正在调用 ${esc(ST.det)}，首次要把模型读进内存，通常 20–60 秒</span>`;
+    $("#vdDoc").textContent = "";
+  }
   btn.disabled = true; btn.textContent = "检测中…";
   try {
     const r = await jpost("/detect", {
@@ -537,11 +566,14 @@ async function doDetect(){
 }
 $("#btnDetect").onclick = doDetect;
 $("#btnDeep").onclick = async () => {
-  const prev = ST.det, deep = ST.deep[0];
+  const deep = ST.deep[0];
   if (!deep) { alert("没有可用的深度检测器"); return; }
-  ST.det = deep; $("#detSel").value = deep; $("#labDetName").textContent = deep;
+  // 深度检测器的名字本来就在下拉框里（optgroup 那一组），
+  // 所以这里可以老实切成它，跑完再切回来；不会出现空白选中项。
+  const prev = ST.det;
+  setDet(deep);
   await doDetect();
-  ST.det = prev; $("#detSel").value = prev; $("#labDetName").textContent = prev;
+  setDet(prev);
 };
 $("#labText").addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") doDetect();

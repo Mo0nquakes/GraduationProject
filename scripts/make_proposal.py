@@ -167,6 +167,22 @@ def placeholder(doc, text):
     return para
 
 
+def figure(doc, path, caption_text, width_cm=14.2):
+    """插入图片并居中，图题在图**下方**（中文论文的惯例，与英文相反）。"""
+    from docx.shared import Cm as _Cm
+
+    f = pathlib.Path(path)
+    if not f.exists():
+        raise SystemExit(f"图不存在: {f}（先跑 python scripts/make_figures.py）")
+    para = doc.add_paragraph()
+    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    para.paragraph_format.space_before = Pt(8)
+    para.paragraph_format.space_after = Pt(4)
+    para.paragraph_format.keep_with_next = True
+    para.add_run().add_picture(str(f), width=_Cm(width_cm))
+    return caption(doc, caption_text)
+
+
 def table(doc, headers, rows, widths=None, size=10.5, caption_text=None):
     t = doc.add_table(rows=1, cols=len(headers))
     t.style = "Table Grid"
@@ -505,8 +521,7 @@ def build():
     bullet(doc, "**阶段三 神经检测**：DistilBERT 微调 + 分块滑窗推理，处理长文档；")
     bullet(doc, "**阶段四 攻防**：文本空间攻击谱系 → 鲁棒性矩阵 → 红队回路对抗训练 → 与 FGSM 对抗训练对照；")
     bullet(doc, "**阶段五 系统**：三级流水线封装为服务，接 RAG 靶子测端到端 ASR，接审计链与控制台。")
-    placeholder(doc, "【图 1 位置：技术路线图（最后绘制）】")
-    caption(doc, "图 1  技术路线")
+    figure(doc, "docs/figs/fig_roadmap.png", "图 1  技术路线与各阶段产出")
 
     h2(doc, "4.3 关键方法")
 
@@ -573,10 +588,23 @@ def build():
     bullet(doc, "**算法层**：检测器统一实现 fit/predict_proba 协议，攻击统一实现 apply(text)→text，指标手写实现；")
     bullet(doc, "**服务层**：/detect 返回逐块分数供界面高亮，/audit/verify 校验哈希链完整性；")
     bullet(doc, "**交互层**：控制台提供提交检测、查看详情、发起红队攻击、对比实验、审计校验五个页面。")
-    placeholder(doc, "【图 2 位置：系统总体架构图（最后绘制）】")
-    caption(doc, "图 2  系统总体架构")
+    figure(doc, "docs/figs/fig_architecture.png", "图 2  系统总体架构")
+    p(doc,
+      "四层各自的职责边界是刻意划清的：**换掉一个检测器不需要动服务层**，"
+      "因为检测器只暴露 fit/predict_proba；**换掉一个攻击不需要动评测**，因为攻击只暴露 apply(text)→text。"
+      "这个约束不是洁癖——它让“增加一个基线”和“增加一种攻击”变成改一个文件的事，"
+      "而这两件事正是本课题后续要反复做的。")
 
-    h2(doc, "5.2 数据库设计")
+    h2(doc, "5.2 角色与用例")
+    p(doc,
+      "系统面向四类参与者：**安全分析员**负责日常检测与研判，**红队工程师**构造攻击并评估绕过，"
+      "**模型工程师**训练检测器与跑对比实验，**审计员**只读地验证日志未被篡改。"
+      "用例划分遵循一条原则：凡是会产生“结论”的动作（检测、攻击、训练、实验）都必须落库，"
+      "凡是能改历史数据的动作一律不提供——审计员没有写权限不是权限管理没做完，"
+      "而是设计上就不存在这个操作。")
+    figure(doc, "docs/figs/fig_usecase.png", "图 3  系统用例图")
+
+    h2(doc, "5.3 数据库设计")
     table(doc,
           ["表名", "作用", "关键字段"],
           [
@@ -591,12 +619,13 @@ def build():
           ],
           widths=[3.6, 6.2, 5.8],
           caption_text="表 5  数据库表设计")
+    figure(doc, "docs/figs/fig_er.png", "图 4  实体关系图（由 DDL 外键自动生成）", width_cm=15.0)
     p(doc,
       "需要强调设计动机：把“数据集版本”“模型版本”“防御策略”“实验记录”都做成独立的表，"
       "是为了让任意一条实验结论都能回答“用的是哪版数据、哪个模型、什么阈值”。"
       "如果只建一张结果表，三个月后自己都说不清某个数字是怎么来的——这是复现性最实际的敌人。")
 
-    h2(doc, "5.3 哈希链审计")
+    h2(doc, "5.4 哈希链审计")
     p(doc,
       "每条检测记录在写入时计算 cur_hash = SHA-256(prev_hash ‖ 规范化后的载荷)，"
       "其中 prev_hash 指向上一条记录的 cur_hash，形成一条链；第一条的 prev_hash 取常量 \"GENESIS\"。"

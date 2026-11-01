@@ -41,7 +41,7 @@ def _binary_y(rows: Sequence[dict]) -> list[int]:
     return [0 if r["label"] == "benign" else 1 for r in rows]
 
 
-def _build(kind: str):
+def _build(kind: str, seed: int | None = None):
     """按名字装配检测器；失败时抛出，由调用方记成 skipped。"""
     from ..models.stub import KeywordDetector
 
@@ -59,12 +59,13 @@ def _build(kind: str):
     if kind in ("distilbert", "distilbert-chunk"):
         from ..models.distilbert import DistilBertDetector
 
-        return DistilBertDetector(chunked=(kind == "distilbert-chunk"), verbose=False)
+        kw = {"seed": seed} if seed is not None else {}
+        return DistilBertDetector(chunked=(kind == "distilbert-chunk"), verbose=False, **kw)
     raise ValueError(f"未知检测器: {kind}")
 
 
 def run_a1(cfg: Config, dataset_dir: Path, detectors: Sequence[str] = DEFAULT_DETECTORS,
-           out_dir: Path | None = None, attacks=None) -> dict[str, Any]:
+           out_dir: Path | None = None, attacks=None, seed: int | None = None) -> dict[str, Any]:
     from ..attacks.obfuscation import ATTACKS
 
     attacks = attacks or list(ATTACKS.values())
@@ -84,6 +85,8 @@ def run_a1(cfg: Config, dataset_dir: Path, detectors: Sequence[str] = DEFAULT_DE
         cmd = [sys.executable, "-m", "injlab._a1_one",
                "--detector", kind, "--data", str(dataset_dir),
                "--out", str(tmp), "--fpr", str(cfg.fpr_target)]
+        if seed is not None:
+            cmd += ["--seed", str(seed)]
         t0 = time.perf_counter()
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0 or not tmp.exists():

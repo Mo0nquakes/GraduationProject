@@ -21,6 +21,8 @@ def main() -> int:
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--fpr", type=float, default=0.01)
+    ap.add_argument("--seed", type=int, default=None,
+                    help="随机种子；换种子重跑是出均值±标准差的前提")
     args = ap.parse_args()
 
     # 限线程：机器上还有别的活，别把 CPU 抢光
@@ -44,13 +46,17 @@ def main() -> int:
     tr_y, te_y = _binary_y(train), _binary_y(test)
 
     t0 = time.perf_counter()
-    row: dict = {"detector": args.detector, "status": "ok"}
-    det = _build(args.detector)
+    row: dict = {"detector": args.detector, "status": "ok", "seed": args.seed}
+    det = _build(args.detector, seed=args.seed)
     det.fit(tr_texts, [r["label"] for r in train])
     tr_scores = det.predict_proba(tr_texts)
     thr = metrics.threshold_at_fpr(tr_y, tr_scores, cfg.fpr_target)
     thr = max(0.0, min(1.0, float(thr)))
 
+    # 必须先预热再计时：transformers 首次 forward 要建图、MPS 要初始化，
+    # 冷启动那一次能比稳态慢一个数量级。不预热的话"延迟"这一列测的其实是
+    # 模型加载时间，三次运行之间能差出 3 倍，写进论文等于自曝其短。
+    det.predict_proba(te_texts[:2])
     ta = time.perf_counter()
     te_scores = det.predict_proba(te_texts)
     lat = (time.perf_counter() - ta) * 1000.0 / max(1, len(te_texts))
