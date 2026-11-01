@@ -40,7 +40,7 @@ except ModuleNotFoundError as e:  # pragma: no cover
 
 from injlab import metrics
 from injlab.attacks.obfuscation import ATTACKS
-from injlab.chunking import chunk_char_spans
+from injlab.chunking import chunk_char_spans, sentence_char_spans
 from injlab.config import Config
 from injlab.db.store import Store
 from injlab.eval import intent
@@ -151,6 +151,19 @@ def detect(req: DetectRequest) -> JSONResponse:
     else:
         raise HTTPException(400, f"未知检测器: {name}")
 
+    # 长文档额外做句级扫描：固定块会被良性上下文稀释，句子不会
+    sent_max = 0.0
+    if len(text.split()) > req.chunk_size and name in STATE.get("detectors", {}):
+        det0 = STATE["detectors"][name]["det"]
+        segs = sentence_char_spans(text)
+        if segs:
+            ssc = det0.predict_proba([c for _s, _e, c in segs])
+            for (cs, ce, _c), sc0 in zip(segs, ssc):
+                if sc0 > thr and sc0 > sent_max:
+                    sent_max = float(sc0)
+                if sc0 > thr:
+                    chunks.append({"start": cs, "end": ce, "score": float(sc0)})
+
     top = max((c["score"] for c in chunks), default=0.0)
     naive = float(STATE["detectors"][STATE["default"]]["det"].predict_proba(
         [" ".join(text.split()[:512])])[0]) if name in STATE.get("detectors", {}) else None
@@ -163,6 +176,7 @@ def detect(req: DetectRequest) -> JSONResponse:
         "pred": "malicious" if score > thr else "benign",
         "max_chunk_score": round(top, 4),
         "naive_truncated_score": round(naive, 4) if naive is not None else None,
+        "sentence_max_score": round(sent_max, 4),
         "n_words": len(text.split()),
         "chunks": chunks,
         "cold_start": cold,

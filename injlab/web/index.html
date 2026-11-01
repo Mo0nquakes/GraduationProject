@@ -262,7 +262,8 @@ function renderDetect(r, text){
         <span>阈值 <b>${r.threshold.toFixed(3)}</b></span>
         <span>词数 <b>${r.n_words}</b></span>
         ${r.naive_truncated_score!=null?`<span>朴素截断(512词) <b>${r.naive_truncated_score.toFixed(3)}</b></span>`:""}
-        ${r.chunks&&r.chunks.length?`<span>分块数 <b>${r.chunks.length}</b></span><span>最高块 <b>${r.max_chunk_score.toFixed(3)}</b></span>`:""}
+        ${r.chunks&&r.chunks.length?`<span>命中片段 <b>${r.chunks.length}</b></span><span>最高块 <b>${r.max_chunk_score.toFixed(3)}</b></span>`:""}
+        ${r.sentence_max_score?`<span>句级最高 <b>${r.sentence_max_score.toFixed(3)}</b></span>`:""}
       </div>
       <div class="doc" style="margin-top:12px">${hl}</div>
       ${r.chunks&&r.chunks.length?`
@@ -381,11 +382,15 @@ async function runScript(seed){
         if (s.kind === "benign"){ verdict = blocked ? "误报" : "放行"; cls = blocked ? "fail" : "pass"; }
         else if (s.kind === "truncation"){
           const naiveNo = (r.naive_truncated_score ?? 1) <= r.threshold;
-          const chunkYes = (r.max_chunk_score ?? 0) > r.threshold;
-          verdict = `朴素截断 ${naiveNo ? "漏检" : "检出"} / 分块滑窗 ${chunkYes ? "检出" : "漏检"}`;
-          cls = (naiveNo && chunkYes) ? "pass" : "skip";
+          const sYes = (r.sentence_max_score ?? 0) > r.threshold;
+          verdict = `朴素截断 ${naiveNo ? "漏检" : "检出"} / 句级扫描 ${sYes ? "检出" : "漏检"}`
+                  + `（整篇 ${r.score.toFixed(3)}，句级最高 ${(r.sentence_max_score??0).toFixed(3)}）`;
+          cls = (naiveNo && sYes) ? "pass" : "skip";
         } else if (s.expect === "block_after_norm"){
           verdict = blocked ? "规范化后拦住" : "仍未拦住"; cls = blocked ? "pass" : "fail";
+        } else if (s.kind === "zh"){
+          verdict = blocked ? "意外拦住了" : "漏检（英文训练集的已知缺口）";
+          cls = blocked ? "skip" : "fail";
         } else if (s.kind === "obfuscate"){
           verdict = blocked ? "没能绕过" : "成功绕过"; cls = blocked ? "skip" : "pass";
         } else {

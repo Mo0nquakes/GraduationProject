@@ -87,3 +87,34 @@ def chunk_char_spans(text: str, size: int, stride: int) -> list[tuple[int, int, 
             continue
         out.append((spans[ws][0], spans[end_word - 1][1], chunk))
     return out
+
+
+_SENT_RE = None
+
+
+def sentence_char_spans(text: str) -> list[tuple[int, int, str]]:
+    """按句子切，带字符偏移。
+
+    为什么长文档不能只用固定块：字符级 TF-IDF 的特征是 l2 归一的，512 词的块里
+    塞进一句载荷，信号会被 500 个良性词稀释掉——实测 512 词块最高只到 0.51，
+    而单独拿出那一句是 0.72。所以滑窗既要"够长以覆盖上下文"，也要"够短以不被
+    稀释"，句级是最实用的折中。
+    """
+    import re
+
+    global _SENT_RE
+    if _SENT_RE is None:
+        _SENT_RE = re.compile(r"(?<=[.!?。！？])\s+|\n{2,}")
+    out: list[tuple[int, int, str]] = []
+    pos = 0
+    for m in _SENT_RE.finditer(text):
+        seg = text[pos:m.start()]
+        if seg.strip():
+            lead = len(seg) - len(seg.lstrip())
+            out.append((pos + lead, m.start(), seg.strip()))
+        pos = m.end()
+    tail = text[pos:]
+    if tail.strip():
+        lead = len(tail) - len(tail.lstrip())
+        out.append((pos + lead, len(text), tail.strip()))
+    return out
