@@ -251,8 +251,15 @@ def run_experiment(
 
     # 5) 落盘
     result["run_dir"] = str(run_dir)
+    run_conf = cfg.to_dict()
+    # 补两个"这次跑的是什么"的字段：不写进去，前端只能显示 null，
+    # 事后翻 runs/ 目录也认不出这行数字是哪一版模型跑出来的。
+    run_conf["detector"] = getattr(detector, "name", "unknown")
+    run_conf["threshold"] = float(thr)
+    run_conf["n_train"] = len(train)
+    run_conf["n_test"] = len(test)
     (run_dir / "config.json").write_text(
-        json.dumps(cfg.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps(run_conf, ensure_ascii=False, indent=2), encoding="utf-8")
     (run_dir / "metrics.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     with (run_dir / "predictions.jsonl").open("w", encoding="utf-8") as f:

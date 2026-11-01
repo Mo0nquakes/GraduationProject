@@ -79,6 +79,14 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
   border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
+.chartbox{position:relative;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 6px 4px}
+.chartbox svg{display:block;width:100%;height:auto}
+.chartbox .tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);
+  font-size:12px;line-height:1.5;padding:7px 10px;border-radius:6px;opacity:0;transition:opacity .1s;
+  white-space:nowrap;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.chartbox .tip.on{opacity:1}
+.chartbox .bar-rect{transition:opacity .12s}
+.chartbox g:hover .bar-rect{opacity:.72}
 img.chart{width:100%;max-height:540px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff}
 footer{color:var(--ink3);font-size:12px;text-align:center;padding:26px 0 34px}
 /* 论文截图模式：去掉一切装饰 */
@@ -153,7 +161,11 @@ body.print .page{display:block!important;margin-bottom:26px}
   <div class="card">
     <h3>A1 全基线对比</h3>
     <p class="hint">同一份数据、同一套攻击、同一套阈值口径。阈值只在训练集良性样本上校准，正样本标签不参与。</p>
-    <img class="chart" id="chartA1" alt="A1 对比图">
+    <div id="svgA1" class="chartbox"><p class="hint">加载中…</p></div>
+    <div class="kv" id="a1Meta"></div>
+    <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--ink2);font-size:12.5px">论文用静态图（matplotlib 预渲染 PNG）</summary>
+      <img class="chart" id="chartA1" alt="A1 对比图" style="margin-top:10px">
+    </details>
   </div>
   <div class="card">
     <h3>攻击谱系鲁棒性</h3>
@@ -379,8 +391,73 @@ async function loadAttacks(){
   });
 }
 
-/* ---------- 实验 ---------- */
+/* ---------- 实验：手绘 SVG 柱状图 ----------
+   为什么不用图表库：整个前端是单文件、零外链、断网可用。用 div/SVG 手绘
+   60 行就够，换来 hover 提示和实时刷新，比一张死 PNG 强。PNG 仍然保留，
+   因为论文里要的是静态图。 */
+let A1ROWS = [];
+async function loadA1(){
+  try{
+    const j = await jget("/a1");
+    A1ROWS = j.rows;
+    drawA1();
+    $("#a1Meta").innerHTML = `<span>数据来源 <b class="mono">${esc(j.source)}</b></span>
+      <span>负样本 N=<b>${A1ROWS[0]?.n_benign ?? "—"}</b></span>
+      <span>阈值口径 <b>训练集良性分位数（FPR 目标 1%）</b></span>`;
+  }catch(e){ $("#svgA1").innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
+}
+
+function drawA1(){
+  const rows = A1ROWS;
+  if (!rows.length) return;
+  const W = 900, H = 340, L = 52, R = 16, T = 16, B = 52;
+  const iw = W - L - R, ih = H - T - B;
+  const y = v => T + ih * (1 - v);
+  let g = "";
+  for (let i = 0; i <= 5; i++){
+    const v = i / 5, yy = y(v);
+    g += `<line x1="${L}" y1="${yy}" x2="${W - R}" y2="${yy}" stroke="var(--line)" stroke-width="1"/>`;
+    g += `<text x="${L - 10}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--ink3)">${v.toFixed(1)}</text>`;
+  }
+  const gw = iw / rows.length, bw = Math.min(38, gw / 3.4);
+  let bars = "";
+  rows.forEach((r, i) => {
+    const cx = L + gw * (i + 0.5);
+    const x1 = cx - bw - 2, x2 = cx + 2;
+    bars += `<g data-i="${i}" style="cursor:pointer">
+      <rect class="bar-rect" x="${x1}" y="${y(r.tpr||0)}" width="${bw}" height="${ih*(r.tpr||0)}" rx="2" fill="var(--blue)"/>
+      <rect class="bar-rect" x="${x2}" y="${y(r.tpr10||0)}" width="${bw}" height="${ih*(r.tpr10||0)}" rx="2" fill="var(--blue)" opacity=".45"/>
+      <text x="${x1 + bw/2}" y="${y(r.tpr||0) - 6}" text-anchor="middle" font-size="10.5" fill="var(--ink2)">${(r.tpr??0).toFixed(2)}</text>
+      <text x="${cx}" y="${H - 30}" text-anchor="middle" font-size="11.5" fill="var(--ink)">${esc(r.detector)}</text>
+      <g class="hoverzone"></g>
+      <rect x="${cx - gw/2}" y="${T}" width="${gw}" height="${ih}" fill="transparent"/>
+    </g>`;
+  });
+  const legend = `<g font-size="11" fill="var(--ink2)">
+      <rect x="${L}" y="${T - 2}" width="10" height="10" rx="2" fill="var(--blue)"/><text x="${L + 15}" y="${T + 7}">TPR @ FPR=1%</text>
+      <rect x="${L + 110}" y="${T - 2}" width="10" height="10" rx="2" fill="var(--blue)" opacity=".45"/><text x="${L + 125}" y="${T + 7}">TPR @ FPR=10%</text>
+    </g>`;
+  $("#svgA1").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="A1 全基线对比">
+      ${g}${bars}${legend}
+      <line x1="${L}" y1="${y(0)}" x2="${W - R}" y2="${y(0)}" stroke="var(--ink3)" stroke-width="1"/>
+    </svg><div class="tip" id="a1Tip"></div>`;
+  const tip = $("#a1Tip"), box = $("#svgA1");
+  box.querySelectorAll("g[data-i]").forEach(el => {
+    el.onmousemove = ev => {
+      const r = rows[+el.dataset.i];
+      tip.innerHTML = `<b>${esc(r.detector)}</b><br>TPR@1% ${(r.tpr??0).toFixed(3)} · TPR@10% ${(r.tpr10??0).toFixed(3)}<br>
+        AUC ${num(r.auc)} · FPR ${(r.fpr??0).toFixed(3)} · F1 ${num(r.f1)}<br>延迟 ${num(r.latency_ms)} ms`;
+      tip.classList.add("on");
+      const b = box.getBoundingClientRect();
+      tip.style.left = Math.min(ev.clientX - b.left + 14, b.width - 210) + "px";
+      tip.style.top = (ev.clientY - b.top - 10) + "px";
+    };
+    el.onmouseleave = () => tip.classList.remove("on");
+  });
+}
+
 async function loadExperiments(){
+  loadA1();
   $("#chartA1").src = "/chart/a1_tpr?" + Date.now();
   $("#chartAtk").src = "/chart/attack_asr?" + Date.now();
   try{

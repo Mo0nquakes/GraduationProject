@@ -53,6 +53,7 @@ def latest_a1(runs_dir: str | Path = "runs") -> dict | None:
         n = sum(1 for r in rep.get("results", []) if r.get("status") == "ok")
         key = (n, f.parent.name)
         if key > best_key:
+            rep["_source"] = f.parent.name
             best, best_key = rep, key
     return best
 
@@ -77,6 +78,7 @@ def chart_a1(report: dict, out: Path) -> Path:
     ax.set_ylim(0, 1.12)
     ax.set_ylabel("恶意样本召回率", fontsize=9, color=INK)
     ax.set_title(f"A1 全基线对比（负样本 N={rows[0]['n_benign_test'] if rows else 0}）",
+                 loc="left",
                  fontsize=10, color=INK)
     ax.grid(axis="y", color=GRID, lw=0.6)
     ax.set_axisbelow(True)

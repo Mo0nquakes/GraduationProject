@@ -272,9 +272,41 @@ def script(seed: int | None = None) -> dict[str, Any]:
     return build_scenario(seed=s, data_dir=_latest_data())
 
 
+@app.get("/a1")
+def a1_report() -> dict[str, Any]:
+    """A1 的原始结果，前端拿它画 SVG（PNG 是给论文用的静态版）。
+
+    每次请求都重新读 runs/：实验一跑完刷新页面就能看到，不用重启服务。
+    """
+    from injlab.web import charts
+
+    rep = charts.latest_a1(ROOT / "runs")
+    if not rep:
+        raise HTTPException(404, "还没有 A1 结果，先跑一次 python -m injlab a1")
+    rows = [{"detector": r["detector"],
+             "tpr": r.get("tpr_at_fpr"), "tpr10": r.get("tpr_at_fpr_10"),
+             "auc": r.get("auc"), "fpr": r.get("fpr"), "f1": r.get("f1"),
+             "latency_ms": r.get("latency_ms"),
+             "n_benign": r.get("n_benign_test")}
+            for r in rep["results"] if r.get("status") == "ok"]
+    return {"source": rep.get("_source", ""), "rows": rows,
+            "dataset": rep.get("dataset_dir", "")}
+
+
 @app.get("/chart/{name}")
 def chart(name: str) -> FileResponse:
     p = (ROOT / "data" / "charts" / f"{name}.png").resolve()
+    # PNG 是启动时画的；只要 runs/ 里有更新的结果就重画，否则页面上会永远是
+    # 上一版数字——这就是"图看起来是死的"的真正原因。
+    try:
+        newest_run = max((f.stat().st_mtime for f in (ROOT / "runs").glob("*_a1/a1.json")),
+                         default=0)
+        if not p.exists() or p.stat().st_mtime < newest_run:
+            from injlab.web import charts
+
+            charts.build_all(ROOT / "runs", ROOT / "data" / "charts")
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] 图表重画失败: {type(e).__name__}: {e}")
     if not p.exists() or not str(p).startswith(str((ROOT / "data" / "charts").resolve())):
         raise HTTPException(404, "没有这张图")
     return FileResponse(p, media_type="image/png")
