@@ -24,7 +24,9 @@ class TfidfLogReg(BaseDetector):
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.linear_model import LogisticRegression
 
-        y = [1 if lab != "benign" else 0 for lab in labels]
+        # 标签既可能传字符串（其余检测器的约定），也可能传 0/1；两种都认，
+        # 否则训练集会静默变成"只有一类"。
+        y = [((lab != "benign") if isinstance(lab, str) else int(lab)) for lab in labels]
         self.vec = TfidfVectorizer(analyzer=self.analyzer, ngram_range=self.ngram_range,
                                    sublinear_tf=True, min_df=1, lowercase=True)
         X = self.vec.fit_transform(texts)

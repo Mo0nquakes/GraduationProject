@@ -297,8 +297,8 @@ docs/
 | A3 FGSM-AT 失效 | embedding 对抗训练后，文本改写 ASR 不降反升 | ✅ `python -m injlab a3 --seeds 0,1,2` → [docs/A3A5.md](docs/A3A5.md) |
 | A4 攻击谱系 | 编码 / 截断 / 语义改写 / 多轮 | ✅ 7 族攻击 × 5 检测器 → [docs/A4.md](docs/A4.md) |
 | A5 红队回路 AT | 规则改写生成攻击 → 增量训练 → 留出族再攻 | ✅ `python -m injlab a5` → [docs/A3A5.md](docs/A3A5.md) |
-| A6 难负样本消融 | 有无 hard negative 的差距 | `--hard-negatives` 已可演示 |
-| A7 端到端 ASR | RAG 靶子上的真实泄漏率 | `python -m injlab rag` 已可演示 |
+| A6 难负样本消融 | 三臂设计（无/含/去线索词对照） | ✅ [A6.md](docs/A6.md) |
+| A7 端到端 ASR | RAG 靶子上的真实泄漏率 | ✅ [A7.md](docs/A7.md) |
 
 ---
 

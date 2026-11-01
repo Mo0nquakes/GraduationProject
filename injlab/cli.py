@@ -336,6 +336,34 @@ def cmd_a5(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_a6(args: argparse.Namespace) -> int:
+    """A6：难负样本消融（含难负 vs 不含，同一张卷子、同一个阈值来源）。"""
+    from .eval.a6 import DEFAULT_DETECTORS, run_a6
+
+    cfg = load(args.config)
+    d = args.data and __import__("pathlib").Path(args.data) or _latest_or_die()
+    dets = args.detectors.split(",") if args.detectors else list(DEFAULT_DETECTORS)
+    print(f"[a6] 数据: {d}")
+    print(f"[a6] 检测器: {', '.join(dets)}")
+    run_a6(cfg, d, detectors=dets, per_family=args.per_family)
+    return 0
+
+
+def cmd_a7(args: argparse.Namespace) -> int:
+    """A7：RAG 靶子端到端 ASR（多攻击 × 多防御档位）。"""
+    from .eval.a7 import DEFAULT_ATTACKS, DEFENSES, run_a7
+
+    cfg = load(args.config)
+    d = args.data and __import__("pathlib").Path(args.data) or _latest_or_die()
+    attacks = [x.strip() for x in args.attacks.split(",")] if args.attacks else list(DEFAULT_ATTACKS)
+    defenses = [x.strip() for x in args.defenses.split(",")] if args.defenses else list(DEFENSES)
+    print(f"[a7] 数据: {d}")
+    print(f"[a7] 攻击 {len(attacks)} 种 × 防御 {len(defenses)} 档")
+    run_a7(cfg, d, attacks=attacks, defenses=defenses,
+           neural_truncation=args.neural_truncation)
+    return 0
+
+
 def cmd_build_targets(args: argparse.Namespace) -> int:
     """构建 A2 的目标集（只做测试，不参与训练）。"""
     from .data.transfer import build_all
@@ -459,6 +487,20 @@ def build_parser() -> argparse.ArgumentParser:
     a5.add_argument("--detector", default="distilbert",
                     help="distilbert / tfidf-char / tfidf-word / keyword")
     a5.set_defaults(func=cmd_a5)
+
+    a6 = sub.add_parser("a6", help="A6 难负样本消融")
+    a6.add_argument("--data", default=None, help="数据目录，默认取最新")
+    a6.add_argument("--detectors", default=None, help="逗号分隔，默认全部可训练检测器")
+    a6.add_argument("--per-family", type=int, default=24, help="每类语用造多少条难负样本")
+    a6.set_defaults(func=cmd_a6)
+
+    a7 = sub.add_parser("a7", help="A7 端到端 ASR（RAG 靶子）")
+    a7.add_argument("--data", default=None, help="数据目录，默认取最新")
+    a7.add_argument("--attacks", default=None, help="逗号分隔")
+    a7.add_argument("--defenses", default=None, help="逗号分隔（默认全部档位）")
+    a7.add_argument("--neural-truncation", action="store_true",
+                    help="额外跑截断攻击 × DistilBERT（需已落盘权重）")
+    a7.set_defaults(func=cmd_a7)
 
     bt = sub.add_parser("build-targets", help="构建 A2 目标集（只测试，不进训练）")
     bt.add_argument("--targets", default="", help="逗号分隔，默认全部可选源")

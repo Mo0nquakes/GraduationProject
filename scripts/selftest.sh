@@ -144,20 +144,22 @@ echo "$BUILD" | grep -q "标签分布" && pass "build-data 跑通：$(echo "$BUI
     || fail "build-data 异常：$(echo "$BUILD" | tail -3)"
 
 # ---- 10. A2/A3/A4/A5 模块可导入、子命令已注册（不真跑模型）----
-echo "[10/10] 实验模块与子命令（A2/A3/A4/A5，仅冒烟）"
+echo "[10/10] 实验模块与子命令（A2/A3/A4/A5/A6/A7，仅冒烟）"
 "$PY" - <<'EOF'
 import importlib
 mods = ["injlab.eval.a2", "injlab.eval.a3", "injlab.eval.a4",
+        "injlab.eval.a6", "injlab.eval.a7", "injlab.data.hardneg",
         "injlab.data.transfer", "injlab.attacks.semantic",
         "injlab.models.adversarial", "injlab.redteam.loop"]
 for m in mods:
     importlib.import_module(m)
 print("imports ok")
 EOF
-[ $? -eq 0 ] && pass "A2/A3/A4/A5 模块可导入" || fail "实验模块导入失败"
+[ $? -eq 0 ] && pass "A2/A3/A4/A5/A6/A7 模块可导入" || fail "实验模块导入失败"
 HELP=$("$PY" -m injlab --help 2>&1)
 echo "$HELP" | grep -q "build-targets" && echo "$HELP" | grep -q "a5" \
-    && pass "子命令 a2/a3/a4/a5/build-targets 已注册" || fail "子命令缺失"
+    && echo "$HELP" | grep -q "a6" && echo "$HELP" | grep -q "a7" \
+    && pass "子命令 a2/a3/a4/a5/a6/a7/build-targets 已注册" || fail "子命令缺失"
 
 echo "================================================================"
 printf " 通过 %d 项，失败 %d 项\n" "$OK" "$FAIL"
