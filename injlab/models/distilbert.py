@@ -131,6 +131,9 @@ class DistilBertDetector(BaseDetector):
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
+                # 8GB 统一内存：不主动回收，第二个 epoch 就 OOM
+                if hasattr(torch, "mps") and torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
                 total += float(loss.item()) * len(batch["labels"])
                 seen += len(batch["labels"])
             self._log(f"epoch {ep + 1}/{self.epochs}  loss={total / max(1, seen):.4f}")

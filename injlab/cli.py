@@ -269,6 +269,93 @@ def cmd_a1(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_a2(args: argparse.Namespace) -> int:
+    """A2：源域训练 → 目标域零样本。目标集不参与任何标定。"""
+    from pathlib import Path as _P
+
+    from .eval.a2 import DEFAULT_DETECTORS, run_a2
+
+    cfg = load(args.config)
+    d = _P(args.data) if args.data else _latest_or_die()
+    targets: dict[str, _P] = {}
+    for name in [x.strip() for x in args.targets.split(",") if x.strip()]:
+        path = _P("data/transfer") / f"{name}.jsonl"
+        if path.exists():
+            targets[name] = path
+        else:
+            print(f"[a2] 跳过 {name}：{path} 不存在（先跑 build-targets）")
+    if not targets:
+        raise SystemExit("没有可用目标集，先跑: python -m injlab build-targets")
+    dets = args.detectors.split(",") if args.detectors else list(DEFAULT_DETECTORS)
+    print(f"[a2] 源域: {d}")
+    print(f"[a2] 目标集: {', '.join(targets)}")
+    print(f"[a2] 检测器: {', '.join(dets)}")
+    run_a2(cfg, d, targets, detectors=dets, seed=args.seed)
+    return 0
+
+
+def cmd_a4(args: argparse.Namespace) -> int:
+    """A4：攻击谱系（字符级 + 语义改写 + 多轮）× 检测器。"""
+    from pathlib import Path as _P
+
+    from .eval.a4 import DEFAULT_DETECTORS, run_a4
+
+    cfg = load(args.config)
+    d = _P(args.data) if args.data else _latest_or_die()
+    dets = args.detectors.split(",") if args.detectors else list(DEFAULT_DETECTORS)
+    print(f"[a4] 数据: {d}")
+    print(f"[a4] 检测器: {', '.join(dets)}")
+    run_a4(cfg, d, detectors=dets)
+    return 0
+
+
+def cmd_a3(args: argparse.Namespace) -> int:
+    """A3：嵌入空间对抗训练（FGSM/PGD）对文本空间攻击有效吗。"""
+    from .eval.a3 import run_a3
+
+    cfg = load(args.config)
+    d = args.data and __import__("pathlib").Path(args.data) or _latest_or_die()
+    modes = [x.strip() for x in args.modes.split(",") if x.strip()]
+    seeds = [int(x) for x in args.seeds.split(",") if x.strip()]
+    print(f"[a3] 数据: {d}")
+    print(f"[a3] 变体: {', '.join(modes)}  种子: {seeds}")
+    run_a3(cfg, d, modes=modes, seeds=seeds)
+    return 0
+
+
+def cmd_a5(args: argparse.Namespace) -> int:
+    """A5：红队回路对抗训练（留出攻击族）。"""
+    from .redteam.loop import run_loop
+
+    cfg = load(args.config)
+    d = args.data and __import__("pathlib").Path(args.data) or _latest_or_die()
+    print(f"[a5] 数据: {d}")
+    print(f"[a5] 轮数: {args.rounds}")
+    print(f"[a5] 检测器: {args.detector}")
+    run_loop(cfg, d, rounds=args.rounds, max_aug=args.max_aug, detector=args.detector)
+    return 0
+
+
+def cmd_build_targets(args: argparse.Namespace) -> int:
+    """构建 A2 的目标集（只做测试，不参与训练）。"""
+    from .data.transfer import build_all
+
+    names = [x.strip() for x in args.targets.split(",") if x.strip()] or None
+    build_all(names, limit=args.limit)
+    return 0
+
+
+def _latest_or_die():
+    from pathlib import Path as _P
+
+    from .paths import latest_dataset
+
+    d = latest_dataset(_P("data/processed"))
+    if d is None:
+        raise SystemExit("data/processed 下没有任何数据集，先跑: python -m injlab build-data")
+    return d
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     cfg = load(args.config)
     store = Store(cfg.db_path)
@@ -345,6 +432,38 @@ def build_parser() -> argparse.ArgumentParser:
     a1.add_argument("--seed", type=int, default=None,
                     help="随机种子（只对神经网络检测器有意义）")
     a1.set_defaults(func=cmd_a1)
+
+    a2 = sub.add_parser("a2", help="A2 跨集泛化（源域训练 → 目标域零样本）")
+    a2.add_argument("--data", default=None, help="源域目录，默认取最新数据集")
+    a2.add_argument("--targets", default="toxicchat,xstest,aegis,pint",
+                    help="逗号分隔的目标集名（对应 data/transfer/<name>.jsonl）")
+    a2.add_argument("--detectors", default=None, help="逗号分隔，默认全部")
+    a2.add_argument("--seed", type=int, default=None)
+    a2.set_defaults(func=cmd_a2)
+
+    a4 = sub.add_parser("a4", help="A4 攻击谱系 × 检测器（含语义改写与多轮）")
+    a4.add_argument("--data", default=None, help="数据目录，默认取最新")
+    a4.add_argument("--detectors", default=None, help="逗号分隔，默认全部")
+    a4.set_defaults(func=cmd_a4)
+
+    a3 = sub.add_parser("a3", help="A3 嵌入空间对抗训练（FGSM/PGD）对照")
+    a3.add_argument("--data", default=None, help="数据目录，默认取最新")
+    a3.add_argument("--modes", default="clean,fgsm,fgsm-weak,pgd", help="逗号分隔")
+    a3.add_argument("--seeds", default="0", help="逗号分隔，例如 0,1,2")
+    a3.set_defaults(func=cmd_a3)
+
+    a5 = sub.add_parser("a5", help="A5 红队回路对抗训练（留出攻击族）")
+    a5.add_argument("--data", default=None, help="数据目录，默认取最新")
+    a5.add_argument("--rounds", type=int, default=3)
+    a5.add_argument("--max-aug", type=int, default=200, help="每轮最多并入多少条")
+    a5.add_argument("--detector", default="distilbert",
+                    help="distilbert / tfidf-char / tfidf-word / keyword")
+    a5.set_defaults(func=cmd_a5)
+
+    bt = sub.add_parser("build-targets", help="构建 A2 目标集（只测试，不进训练）")
+    bt.add_argument("--targets", default="", help="逗号分隔，默认全部可选源")
+    bt.add_argument("--limit", type=int, default=800, help="每源最多取多少行")
+    bt.set_defaults(func=cmd_build_targets)
 
     v = sub.add_parser("verify", help="校验检测日志的哈希链")
     v.set_defaults(func=cmd_verify)

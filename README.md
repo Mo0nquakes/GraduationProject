@@ -273,15 +273,30 @@ docs/
 
 ---
 
+## 实验结果速览（2026-11-01 夜，A2/A3/A4/A5 首次全量）
+
+四份报告：[A2 跨集泛化](docs/A2.md) · [A4 攻击谱系](docs/A4.md) · [A3/A5 对抗训练两条路线](docs/A3A5.md) · [拍的板](docs/DECISIONS.md)
+
+| 实验 | 最要紧的一个数 |
+|---|---|
+| A2 跨集泛化 | 源域 TPR@1% = 0.883，到 ToxicChat 掉到 0.343，**同时误报率 79.2%** |
+| A4 攻击谱系 | 全角化一击把三个 TF-IDF 打到 **ASR 1.000**；语义改写把 guardrail 打到 **0.438** |
+| A3 嵌入空间 AT | ε=0.05 时干净 TPR 从 0.937 塌到 **0.090**，所有攻击族反而更差 |
+| A5 红队回路 | `fullwidth` ASR **1.000 → 0.000**（一轮），留出的 `homoglyph` **0.562 → 0.250** |
+
+一句话：**A3 那条路（嵌入空间扰动）是把模型弄钝，A5 那条路（文本空间变体）是把模型弄准。**
+
+---
+
 ## 实验矩阵与代码的对应关系
 
 | 实验 | 内容 | 代码现状 |
 |---|---|---|
-| A1 基线对比 | 规则 / TF-IDF+LR / DistilBERT / 现成 guardrail | **已跑通真数据**，DistilBERT 报 n=3 种子 |
-| A2 跨集泛化 | 训练 deepset，测 PINT / ToxicChat | 数据源已接（`build-data --sources`），实验脚本待写 |
-| A3 FGSM-AT 失效 | embedding 对抗训练后，文本改写 ASR 几乎不降 | 待实现（寒假） |
-| A4 攻击谱系 | 编码 / 截断 / 语义改写 / 多轮 | 4 种编码攻击 + 截断已实现 |
-| A5 红队回路 AT | LLM 生成攻击 → 增量训练 → 再攻 | 待实现 |
+| A1 基线对比 | 规则 / TF-IDF+LR / DistilBERT / 现成 guardrail | ✅ 真数据，全五族，DistilBERT 报 n=3 种子 → `docs/` |
+| A2 跨集泛化 | 训练 deepset，测 ToxicChat / XSTest / AEGIS / PINT | ✅ `python -m injlab build-targets && python -m injlab a2` → [docs/A2.md](docs/A2.md) |
+| A3 FGSM-AT 失效 | embedding 对抗训练后，文本改写 ASR 不降反升 | ✅ `python -m injlab a3 --seeds 0,1,2` → [docs/A3A5.md](docs/A3A5.md) |
+| A4 攻击谱系 | 编码 / 截断 / 语义改写 / 多轮 | ✅ 7 族攻击 × 5 检测器 → [docs/A4.md](docs/A4.md) |
+| A5 红队回路 AT | 规则改写生成攻击 → 增量训练 → 留出族再攻 | ✅ `python -m injlab a5` → [docs/A3A5.md](docs/A3A5.md) |
 | A6 难负样本消融 | 有无 hard negative 的差距 | `--hard-negatives` 已可演示 |
 | A7 端到端 ASR | RAG 靶子上的真实泄漏率 | `python -m injlab rag` 已可演示 |
 
@@ -294,7 +309,8 @@ docs/
 | 组件 | 现状 | 换成真的需要做什么 |
 |---|---|---|
 | 数据 | **已接真实语料**（`build-data`）：deepset 662 行可用；WildGuardMix/ToxicChat/XSTest/PINT 是可选源，网络与 gated 限制见上文 | indirect 类目前靠合成模板补，需找 BIPIA 之类真实间接注入语料替换 |
-| 检测器 | 关键词 + TF-IDF | 加 DistilBERT 微调（手写训练循环，别用 Trainer 黑盒） |
+| 检测器 | 五族齐全：关键词 / TF-IDF(word,char) / DistilBERT / 现成 guardrail | 已够用；要再加就是零样本 guardrail 的其它族 |
+| 攻击生成 | **规则改写**（同义词 + 句序 + 文档化包装）、3 轮递进 | 接 LLM 改写（`INJLAB_LLM_BASE_URL`）或真的训一个 PAIR 攻击模型 |
 | token 计数 | 用空格分词近似 | 换 tokenizer 的 `offset_mapping`，才能把块分数映射回字符区间 |
 | RAG 检索 | 哈希向量 | 换 sentence-transformers 或 BM25 |
 | 靶子模型 | 确定性假模型 | 换本地小模型（Qwen2.5-1.5B 级别）或 API |

@@ -19,7 +19,7 @@ echo " injlab 自检"
 echo "================================================================"
 
 # ---- 1. 解释器与依赖 ----
-echo "[1/8] 环境"
+echo "[1/10] 环境"
 if [ ! -x "$PY" ]; then
     fail "找不到 .venv/bin/python —— 先执行: bash scripts/setup_venv.sh"
     echo "停止：没有虚拟环境后面的都跑不了。"
@@ -142,6 +142,22 @@ echo "[9/9] 数据管线 build-data（fixture，离线）"
 BUILD=$("$PY" -m injlab build-data --sources fixture --no-db 2>&1)
 echo "$BUILD" | grep -q "标签分布" && pass "build-data 跑通：$(echo "$BUILD" | grep -o 'train [0-9]* / test [0-9]*' | head -1)" \
     || fail "build-data 异常：$(echo "$BUILD" | tail -3)"
+
+# ---- 10. A2/A3/A4/A5 模块可导入、子命令已注册（不真跑模型）----
+echo "[10/10] 实验模块与子命令（A2/A3/A4/A5，仅冒烟）"
+"$PY" - <<'EOF'
+import importlib
+mods = ["injlab.eval.a2", "injlab.eval.a3", "injlab.eval.a4",
+        "injlab.data.transfer", "injlab.attacks.semantic",
+        "injlab.models.adversarial", "injlab.redteam.loop"]
+for m in mods:
+    importlib.import_module(m)
+print("imports ok")
+EOF
+[ $? -eq 0 ] && pass "A2/A3/A4/A5 模块可导入" || fail "实验模块导入失败"
+HELP=$("$PY" -m injlab --help 2>&1)
+echo "$HELP" | grep -q "build-targets" && echo "$HELP" | grep -q "a5" \
+    && pass "子命令 a2/a3/a4/a5/build-targets 已注册" || fail "子命令缺失"
 
 echo "================================================================"
 printf " 通过 %d 项，失败 %d 项\n" "$OK" "$FAIL"
