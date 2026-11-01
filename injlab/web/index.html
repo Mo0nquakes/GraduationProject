@@ -136,6 +136,7 @@ textarea{
 .chip.bad{color:var(--danger); background:color-mix(in srgb,var(--danger) 10%,transparent); border-color:color-mix(in srgb,var(--danger) 28%,transparent)}
 .chip.good{color:var(--ok); background:color-mix(in srgb,var(--ok) 10%,transparent); border-color:color-mix(in srgb,var(--ok) 28%,transparent)}
 .chip.flat{color:var(--muted); background:var(--line-soft); border-color:var(--line)}
+.chip.warn{color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
 .big{font-family:var(--serif); font-size:40px; line-height:1; font-weight:700; font-variant-numeric:tabular-nums}
 .bar{position:relative; height:8px; border-radius:999px; background:var(--line-soft); margin:var(--s4) 0 var(--s3); overflow:hidden}
 .bar > i{position:absolute; inset:0 auto 0 0; border-radius:999px; background:var(--ok);
@@ -158,6 +159,7 @@ textarea{
   background:var(--panel); border:2px solid var(--line)}
 .sitem.ok::before{border-color:var(--ok); background:var(--ok)}
 .sitem.bad::before{border-color:var(--danger); background:var(--danger)}
+.sitem.warn::before{border-color:var(--warn); background:var(--warn)}
 .sitem .t{font-weight:600; font-size:14px}
 .sitem .n{font-size:12.5px; color:var(--muted); margin:2px 0 var(--s2)}
 .sitem .r{display:flex; gap:var(--s3); align-items:center; flex-wrap:wrap; font-size:12.5px}
@@ -383,7 +385,16 @@ async function jget(url){
 async function jpost(url, body){
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.detail || (url + " → HTTP " + r.status));
+  if (!r.ok){
+    // FastAPI 的 detail 可能是字符串、对象数组（422 校验错误）或对象，
+    // 直接拼字符串会变成 "[object Object]"，所以这里分开处理。
+    const d = j.detail;
+    let msg = url + " → HTTP " + r.status;
+    if (typeof d === "string") msg = d;
+    else if (Array.isArray(d)) msg = d.map(x => (x && (x.msg || x.loc)) ? `${(x.loc || []).join(".")}: ${x.msg || ""}` : JSON.stringify(x)).join("; ");
+    else if (d) msg = JSON.stringify(d);
+    throw new Error(msg);
+  }
   return j;
 }
 
@@ -599,6 +610,20 @@ async function runScript(seed){
       $("#tl").appendChild(item);
       await new Promise(r => setTimeout(r, 90));
 
+      // ⑦ 审计链不是一条文本，没有 text 字段，要走 /audit/verify
+      if (step.kind === "audit"){
+        try {
+          const a = await jget("/audit/verify");
+          item.classList.add(a.ok ? "ok" : "bad");
+          item.querySelector(".r").innerHTML =
+            `<span class="chip ${a.ok ? "good" : "bad"}">${a.ok ? "校验通过" : "校验失败"}</span>` +
+            `<span class="mono dim">${esc(a.detail || "")}</span>`;
+        } catch (e) {
+          item.querySelector(".r").innerHTML = `<span class="chip flat">${esc(e.message)}</span>`;
+        }
+        continue;
+      }
+
       let r;
       try {
         r = await jpost("/detect", {
@@ -611,13 +636,18 @@ async function runScript(seed){
         continue;
       }
       const blocked = r.pred === "malicious";
-      let label, cls;
-      if (step.expect === "allow"){ label = blocked ? "误报 · 被拦" : "良性 · 放行"; cls = blocked ? "bad" : "ok"; }
-      else if (step.expect === "bypass"){ label = blocked ? "没绕过 · 被拦" : "绕过成功"; cls = blocked ? "ok" : "bad"; }
-      else { label = blocked ? "恶意 · 拦住" : "漏检 · 放过"; cls = blocked ? "ok" : "bad"; }
-      item.classList.add(cls);
+      // [文案, 圆点, chip 颜色]；warn 表示"这是已知缺口，不是本次的意外"
+      const V = {
+        allow:            () => blocked ? ["误报 · 被拦", "bad", "bad"] : ["良性 · 放行", "ok", "good"],
+        block:            () => blocked ? ["恶意 · 拦住", "ok", "good"] : ["漏检 · 放过", "bad", "bad"],
+        block_after_norm: () => blocked ? ["规范化后拦住", "ok", "good"] : ["规范化后仍漏检", "bad", "bad"],
+        chunk_only:       () => blocked ? ["分块扫描检出", "ok", "good"] : ["分块也没检出", "bad", "bad"],
+        bypass:           () => blocked ? ["没绕过 · 被拦", "ok", "good"] : ["绕过成功", "bad", "bad"],
+        miss:             () => blocked ? ["这次拦住了", "ok", "good"] : ["已知缺口 · 漏检", "warn", "warn"]
+      };
+      const [label, dot, tone] = (V[step.expect] || V.block)();
+      item.classList.add(dot);
 
-      const tone = cls === "ok" ? "good" : "bad";
       const bits = [`<span class="chip ${tone}">${esc(label)}</span>`,
         `<span class="mono dim">分数 ${px(r.score)} / 阈值 ${px(r.threshold)}</span>`];
       if (r.n_words > 512 && r.naive_truncated_score != null)
