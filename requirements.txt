@@ -12,10 +12,10 @@ fastapi>=0.110
 uvicorn>=0.29
 pydantic>=2.6
 
-# --- 深度学习（寒假再解注释，别提前装）---
-# 注意：Apple Silicon 用 torch>=2.2 的 MPS 后端；float64 不支持，
-# DataLoader num_workers>0 在 macOS 上易触发 spawn 报错，pin_memory 无效。
-# torch>=2.2
-# transformers>=4.40
-# datasets>=2.18
-# accelerate>=0.29
+# --- 深度学习（A1 第三列 DistilBERT）---
+# 已实测可用：torch 2.15.0 + transformers 5.22.1（macOS arm64 / MPS）。
+# 三个坑已在 models/distilbert.py 里处理：MPS 不支持 float64、
+# DataLoader num_workers>0 在 macOS 会 spawn 崩、pin_memory 在 MPS 上无效。
+torch>=2.2
+transformers>=4.40
+datasets>=2.18
