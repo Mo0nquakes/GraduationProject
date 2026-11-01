@@ -545,7 +545,7 @@ async function doDetect(){
     $("#vdChip").className = "chip flat";
     $("#vdChip").textContent = "计算中…";
     $("#vdScore").textContent = "…";
-    $("#vdMeta").innerHTML = `<span>正在调用 ${esc(ST.det)}，首次要把模型读进内存，通常 20–60 秒</span>`;
+    $("#vdMeta").innerHTML = `<span>正在调用 ${esc(ST.det)}，要把模型读进内存，实测约 10 秒；冷启动会更久</span>`;
     $("#vdDoc").textContent = "";
   }
   btn.disabled = true; btn.textContent = "检测中…";
