@@ -79,7 +79,7 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
   border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
-img.chart{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+img.chart{width:100%;max-height:540px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff}
 footer{color:var(--ink3);font-size:12px;text-align:center;padding:26px 0 34px}
 /* 论文截图模式：去掉一切装饰 */
 body.print header,body.print nav,body.print button,body.print footer{display:none!important}
@@ -157,7 +157,7 @@ body.print .page{display:block!important;margin-bottom:26px}
   </div>
   <div class="card">
     <h3>攻击谱系鲁棒性</h3>
-    <p class="hint">格子里的数字是 ASR*：只统计"改完人还读得懂"的攻击。n/a 表示该攻击下没有一条样本能通过意图保留判据。</p>
+    <p class="hint">格子里的数字是 ASR*：只统计"改完人还读得懂"的攻击。n/a 有两种情况——identity 不改变任何字符，按定义不算攻击（它的 ASR 见命令行，应等于 1−TPR）；base64_wrap 把载荷变成了人读不懂的编码，同样不算有效攻击。</p>
     <img class="chart" id="chartAtk" alt="攻击谱系热力图">
   </div>
   <div class="card">
@@ -198,7 +198,8 @@ function setTheme(t){
   try{localStorage.setItem("injlab.theme", t)}catch(e){}
   themeBtn.textContent = t === "dark" ? "◑ 浅色" : "◐ 深色";
 }
-setTheme((()=>{try{return localStorage.getItem("injlab.theme")||"light"}catch(e){return "light"}})());
+const QS = new URLSearchParams(location.search);
+setTheme(QS.get("theme") || (() => { try { return localStorage.getItem("injlab.theme") || "light" } catch(e) { return "light" } })());
 themeBtn.onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
 /* 打印模式：?print=1 去掉所有交互装饰 */
@@ -212,8 +213,10 @@ $$("nav button").forEach(b => b.onclick = () => {
   $$(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + b.dataset.tab));
   if (b.dataset.tab === "attacks") loadAttacks();
   if (b.dataset.tab === "exp") loadExperiments();
-  if (b.dataset.tab === "audit") { loadStats(); }
+  if (b.dataset.tab === "audit") { loadStats(); $("#btnVerify").click(); }
+  if (b.dataset.tab === "scenario" && !$("#scriptOut").children.length) runScript(null);
 });
+{ const t = QS.get("tab"); const b = t && $$("nav button").find(x => x.dataset.tab === t); if (b) b.click(); }
 
 /* ---------- 健康检查 ---------- */
 async function jget(u){ const r = await fetch(u); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || r.status); return r.json(); }
@@ -257,11 +260,13 @@ function renderDetect(r, text){
         </div>
         <div class="mono" style="font-size:20px;font-weight:650;color:${color}">${r.score.toFixed(4)}</div>
       </div>
-      <div class="bar"><i style="width:${Math.min(100,r.score*100)}%;background:${color}"></i></div>
+      <div class="bar" style="position:relative"><i style="width:${Math.min(100,r.score*100)}%;background:${color}"></i>
+        <span style="position:absolute;left:${Math.min(100,r.threshold*100)}%;top:-3px;width:2px;height:15px;background:var(--ink2);opacity:.55" title="阈值 ${r.threshold.toFixed(3)}"></span>
+      </div>
       <div class="kv">
         <span>阈值 <b>${r.threshold.toFixed(3)}</b></span>
         <span>词数 <b>${r.n_words}</b></span>
-        ${r.naive_truncated_score!=null?`<span>朴素截断(512词) <b>${r.naive_truncated_score.toFixed(3)}</b></span>`:""}
+        ${r.naive_truncated_score!=null && r.n_words>512?`<span>朴素截断(512词) <b>${r.naive_truncated_score.toFixed(3)}</b></span>`:""}
         ${r.chunks&&r.chunks.length?`<span>命中片段 <b>${r.chunks.length}</b></span><span>最高块 <b>${r.max_chunk_score.toFixed(3)}</b></span>`:""}
         ${r.sentence_max_score?`<span>句级最高 <b>${r.sentence_max_score.toFixed(3)}</b></span>`:""}
       </div>
@@ -300,14 +305,37 @@ $("#btnRand").onclick = async () => {
 /* ---------- 攻击谱系 ---------- */
 async function loadAttacks(){
   const j = await jget("/attacks");
-  $("#atkOut").innerHTML = `<table><thead><tr><th>名称</th><th>族</th><th>说明</th><th>变换后的样子</th><th></th></tr></thead><tbody>
+  $("#atkOut").innerHTML = `<table><thead><tr><th>名称</th><th>族</th><th>说明</th>
+      <th>变换后的样子</th><th class="num">当前分数</th><th></th></tr></thead><tbody>
     ${j.attacks.map(a => `<tr>
-      <td class="mono">${esc(a.name)}</td>
+      <td class="mono" style="white-space:nowrap">${esc(a.name)}</td>
       <td><span class="badge mute">${esc(a.family)}</span></td>
       <td style="color:var(--ink2);font-size:12.5px">${esc(a.description)}</td>
-      <td class="mono" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.example)}">${esc(a.example)}</td>
-      <td><button data-try="${esc(a.name)}">试一下</button></td>
-    </tr>`).join("")}</tbody></table>`;
+      <td class="mono" style="max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${esc(a.example)}">${esc(a.example)}</td>
+      <td class="num mono" data-score="${esc(a.name)}" style="white-space:nowrap">…</td>
+      <td style="white-space:nowrap"><button data-try="${esc(a.name)}">试一下</button></td>
+    </tr>`).join("")}</tbody></table>
+    <p class="hint" style="margin-top:10px">分数列用当前检测器（<span class="mono">${esc($("#detSel").value)}</span>）实时算；红字是和 identity 的差值，跌得越多说明这个变换越能绕过它。</p>`;
+
+  // 逐个算分：identity 当基线，其余算差值。5 次请求，tfidf 上总共几十毫秒。
+  const baseName = j.attacks.some(a => a.name === "identity") ? "identity" : j.attacks[0].name;
+  let base = null;
+  for (const a of j.attacks){
+    try{
+      const r = await jpost("/detect", {text: a.example});
+      if (a.name === baseName) base = r.score;
+      const cell = document.querySelector(`[data-score="${a.name}"]`);
+      if (!cell) continue;
+      const cls = r.score > r.threshold ? "bad" : "ok";
+      let extra = "";
+      if (base != null && base - r.score > 0.01){
+        extra = ` <span style="color:var(--red);font-size:11.5px">${(r.score-base).toFixed(2)}</span>`;
+      }
+      cell.innerHTML = `<span class="badge ${cls}">${r.score.toFixed(3)}</span>${extra}`;
+    }catch(e){ }
+  }
+
   $$("[data-try]").forEach(b => b.onclick = () => {
     const a = j.attacks.find(x => x.name === b.dataset.try);
     $("#input").value = a.example;
@@ -319,12 +347,14 @@ async function loadAttacks(){
 
 /* ---------- 实验 ---------- */
 async function loadExperiments(){
+  $("#chartA1").src = "/chart/a1_tpr?" + Date.now();
+  $("#chartAtk").src = "/chart/attack_asr?" + Date.now();
   try{
     const j = await jget("/experiments");
     $("#expOut").innerHTML = j.experiments.length ? `<table><thead><tr><th>运行</th><th>检测器</th><th class="num">TPR@FPR=1%</th><th class="num">AUC</th><th class="num">F1</th></tr></thead><tbody>
       ${j.experiments.map(e => `<tr><td class="mono">${esc(e.name)}</td><td>${esc(e.detector||"—")}</td>
         <td class="num">${num(e.tpr_at_fpr)}</td><td class="num">${num(e.auc)}</td><td class="num">${num(e.f1)}</td></tr>`).join("")}
-      </tbody></table>` : `<p class="hint">还没有运行记录，先跑一次 <span class="mono">python -m injlab a1</span>。</p>`;
+      </tbody></table><p class="hint" style="margin-top:10px">共 ${j.total} 次运行，只列最近 ${j.experiments.length} 次。注意：<span class="mono">demo_*</span> 是 91 条玩具数据上的冒烟运行，数字不能进论文；<span class="mono">*_a1</span> 才是真语料上的对比实验。</p>` : `<p class="hint">还没有运行记录，先跑一次 <span class="mono">python -m injlab a1</span>。</p>`;
   }catch(e){ $("#expOut").textContent = e.message; }
 }
 
@@ -343,9 +373,11 @@ $("#btnVerify").onclick = async () => {
 async function loadStats(){
   try{
     const s = await jget("/stats");
+    const ZH = {sample:"样本", dataset_version:"数据集版本", attack:"攻击", attack_sample:"攻击样本",
+      detection_log:"检测记录", experiment_run:"实验运行", model_version:"模型版本", defense_policy:"防御策略"};
     $("#statsOut").innerHTML = `<div class="row" style="gap:24px">` +
       Object.entries(s).map(([k,v]) => `<div><div class="mono" style="font-size:19px;font-weight:650">${v}</div>
-        <div style="color:var(--ink3);font-size:12px">${esc(k)}</div></div>`).join("") + `</div>`;
+        <div style="color:var(--ink3);font-size:12px">${esc(ZH[k]||k)}</div></div>`).join("") + `</div>`;
   }catch(e){ $("#statsOut").textContent = e.message; }
 }
 
@@ -414,7 +446,10 @@ $("#btnReplay").onclick = () => runScript(lastSeed);
 /* ---------- 启动 ---------- */
 jget("/samples/random?n=1").then(j => {
   if (j.samples.length && !$("#input").value) $("#input").value = j.samples[0].text;
-}).catch(()=>{});
+}).catch(()=>{}).then(() => {
+  // 首屏自动检测一次：页面一打开就有结果，不留空白
+  if ($("#input").value && $("#p-lab").classList.contains("on")) doDetect(false);
+});
 loadStats();
 </script>
 </body>

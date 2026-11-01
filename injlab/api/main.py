@@ -213,6 +213,14 @@ def sample_random(label: str | None = None, n: int = Query(1, ge=1, le=20)) -> d
 
 # ---------------------------------------------------------------- 实验
 
+def _tpr(clean: dict) -> float | None:
+    """tpr_at_fpr 是个字典 {tpr,fpr,thr}，不是标量——直接塞给前端会渲染成 [object Object]。"""
+    v = clean.get("tpr_at_fpr")
+    if isinstance(v, dict):
+        return v.get("tpr")
+    return v
+
+
 @app.get("/experiments")
 def experiments() -> dict[str, Any]:
     out = []
@@ -226,10 +234,21 @@ def experiments() -> dict[str, Any]:
             conf = json.loads(cfgf.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             continue
-        out.append({"name": d.name, "detector": conf.get("detector"),
-                    "tpr_at_fpr": met.get("tpr_at_fpr"),
-                    "auc": met.get("auc"), "f1": met.get("f1")})
-    return {"experiments": out}
+        # metrics.json 的指标嵌在 clean 下面（runner 的输出格式），
+        # 直接 met.get("tpr_at_fpr") 永远拿到 None —— 前端就会满屏"—"。
+        clean = met.get("clean") or {}
+        out.append({
+            "name": d.name,
+            "detector": met.get("detector") or conf.get("detector"),
+            "dataset": conf.get("dataset") or conf.get("data"),
+            "n_train": met.get("n_train"), "n_test": met.get("n_test"),
+            "tpr_at_fpr": _tpr(clean),
+            "auc": clean.get("auc", met.get("auc")),
+            "f1": clean.get("f1", met.get("f1")),
+            "when": d.name.split("_")[0],
+        })
+    out.sort(key=lambda r: r["name"], reverse=True)
+    return {"experiments": out[:15], "total": len(out)}
 
 
 @app.get("/experiment/{name}")

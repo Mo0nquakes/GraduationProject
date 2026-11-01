@@ -38,10 +38,23 @@ def _save(fig, out: Path) -> Path:
 
 
 def latest_a1(runs_dir: str | Path = "runs") -> dict | None:
-    cands = sorted(Path(runs_dir).glob("*_a1/a1.json"))
-    if not cands:
-        return None
-    return json.loads(cands[-1].read_text(encoding="utf-8"))
+    """挑**覆盖检测器最多**的那次 A1，而不是最近的那次。
+
+    因为 `injlab a1 --detectors distilbert` 这种补跑也会生成 *_a1 目录，
+    按时间取最新会把单检测器的图放到"全基线对比"上——图上只剩一根柱子，
+    看起来像别的检测器全挂了。同数量时取最新。
+    """
+    best, best_key = None, (-1, "")
+    for f in Path(runs_dir).glob("*_a1/a1.json"):
+        try:
+            rep = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        n = sum(1 for r in rep.get("results", []) if r.get("status") == "ok")
+        key = (n, f.parent.name)
+        if key > best_key:
+            best, best_key = rep, key
+    return best
 
 
 def chart_a1(report: dict, out: Path) -> Path:
