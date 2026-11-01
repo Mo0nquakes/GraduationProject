@@ -216,7 +216,9 @@ $$("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "audit") { loadStats(); $("#btnVerify").click(); }
   if (b.dataset.tab === "scenario" && !$("#scriptOut").children.length) runScript(null);
 });
-{ const t = QS.get("tab"); const b = t && $$("nav button").find(x => x.dataset.tab === t); if (b) b.click(); }
+{ const t = QS.get("tab"); const b = t && $$("nav button").find(x => x.dataset.tab === t);
+  // 必须延后一拍：此刻下面的 onclick 还没赋值，直接 click() 什么都不会发生
+  if (b) setTimeout(() => b.click(), 0); }
 
 /* ---------- 健康检查 ---------- */
 async function jget(u){ const r = await fetch(u); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || r.status); return r.json(); }
@@ -316,7 +318,7 @@ async function loadAttacks(){
       <td class="num mono" data-score="${esc(a.name)}" style="white-space:nowrap">…</td>
       <td style="white-space:nowrap"><button data-try="${esc(a.name)}">试一下</button></td>
     </tr>`).join("")}</tbody></table>
-    <p class="hint" style="margin-top:10px">分数列用当前检测器（<span class="mono">${esc($("#detSel").value)}</span>）实时算；红字是和 identity 的差值，跌得越多说明这个变换越能绕过它。</p>`;
+    <p class="hint" style="margin-top:10px">分数列用当前检测器（<span class="mono">${esc($("#detSel").value || "默认")}</span>）实时算；红字是和 identity 的差值，跌得越多说明这个变换越能绕过它。</p>`;
 
   // 逐个算分：identity 当基线，其余算差值。5 次请求，tfidf 上总共几十毫秒。
   const baseName = j.attacks.some(a => a.name === "identity") ? "identity" : j.attacks[0].name;
