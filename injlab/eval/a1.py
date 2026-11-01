@@ -54,9 +54,8 @@ def _build(kind: str):
     if kind in ("guardrail", "guardrail-base"):
         from ..models.guardrail import GuardrailDetector
 
-        model = ("protectai/deberta-v3-base-prompt-injection-v2" if kind == "guardrail-base"
-                 else "protectai/deberta-v3-small-prompt-injection-v2")
-        return GuardrailDetector(model_name=model, verbose=False)
+        # small 版是 gated 拿不到，两个名字都指向 base 版
+        return GuardrailDetector(verbose=False)
     if kind in ("distilbert", "distilbert-chunk"):
         from ..models.distilbert import DistilBertDetector
 

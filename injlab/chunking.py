@@ -56,3 +56,34 @@ def make_long_document(prefix: str = "The quarterly report covers operations, hi
         parts.append(f"{prefix}Paragraph {i}: revenue grew steadily and costs stayed flat in region R{i % 7}.")
     parts.append(payload)
     return " ".join(parts)
+
+
+_WORD_RE = None
+
+
+def word_spans(text: str) -> list[tuple[int, int]]:
+    """每个词在**原文字符串**里的起止位置。
+
+    为什么需要它：`chunk_text` 按词下标切块，但前端要高亮必须在字符下标上做。
+    少了这层映射，界面就只能高亮出一堆错位的位置——比不高亮更糟。
+    """
+    import re
+
+    global _WORD_RE
+    if _WORD_RE is None:
+        _WORD_RE = re.compile(r"\S+")
+    return [(m.start(), m.end()) for m in _WORD_RE.finditer(text)]
+
+
+def chunk_char_spans(text: str, size: int, stride: int) -> list[tuple[int, int, str]]:
+    """带字符偏移的分块：[(start_char, end_char, chunk_text), ...]"""
+    spans = word_spans(text)
+    out: list[tuple[int, int, str]] = []
+    for ws, _we, chunk in chunk_text(text, size, stride):
+        if ws >= len(spans):
+            break
+        end_word = min(ws + max(1, chunk.count(" ")) + 1, len(spans))
+        if end_word <= ws:
+            continue
+        out.append((spans[ws][0], spans[end_word - 1][1], chunk))
+    return out

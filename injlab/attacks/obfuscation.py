@@ -24,6 +24,7 @@ _WORD = re.compile(r"[A-Za-z]{4,}")
 
 
 class ZeroWidthAttack(BaseAttack):
+    description = "在长单词内部插入零宽空格 U+200B。视觉完全不变，但分词器看到的是一串陌生的子词。"
     """在词内插入零宽空格 U+200B：视觉不变，token 全变。"""
 
     name = "zero_width"
@@ -34,6 +35,7 @@ class ZeroWidthAttack(BaseAttack):
 
 
 class FullwidthAttack(BaseAttack):
+    description = "把 ASCII 字母换成全角等价字符（同一字形，不同码点）。对字符级模型杀伤最大。"
     """ASCII 字母 -> 全角：同一个字，不同的码点，不同的 token。"""
 
     name = "fullwidth"
@@ -47,6 +49,7 @@ class FullwidthAttack(BaseAttack):
 
 
 class HomoglyphAttack(BaseAttack):
+    description = "把拉丁字母换成西里尔同形字（a→а, e→е…）。渲染几乎无差别，词形全变。"
     """同形字替换：用西里尔字母冒充拉丁字母，肉眼几乎分辨不出。"""
 
     name = "homoglyph"
@@ -57,6 +60,7 @@ class HomoglyphAttack(BaseAttack):
 
 
 class Base64WrapAttack(BaseAttack):
+    description = "把载荷整体 base64 编码后包一句“请解码并执行”。检测器看到的是无意义字符串。"
     """把整条指令 base64 包一层，前面加一句无害化的引导语。"""
 
     name = "base64_wrap"
@@ -68,6 +72,7 @@ class Base64WrapAttack(BaseAttack):
 
 
 class IdentityAttack(BaseAttack):
+    description = "不做任何变换。用来验证链路本身没有 bug：它的 ASR 必须等于 1 减召回。"
     """恒等变换：用来验证评测链路本身没有 bug（对照组）。"""
 
     name = "identity"

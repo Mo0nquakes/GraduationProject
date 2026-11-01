@@ -135,9 +135,45 @@ class DistilBertDetector(BaseDetector):
                 seen += len(batch["labels"])
             self._log(f"epoch {ep + 1}/{self.epochs}  loss={total / max(1, seen):.4f}")
         self._model.eval()
+        try:
+            self.save()  # 落盘，供 API 子进程加载
+        except Exception as e:  # noqa: BLE001
+            self._log(f"保存权重失败（不影响本次训练）: {e}")
         return self
 
     # ---------- 推理 ----------
+    # -- 权重落盘 -------------------------------------------------
+    # 为什么要存：API 的"深度检测"走子进程，每次都要重新加载模型；
+    # 如果权重只在内存里，子进程加载到的就是随机初始化的头，分数毫无意义。
+
+    @property
+    def save_dir(self):
+        from pathlib import Path as _P
+
+        return _P("data") / "models" / "distilbert-inj"
+
+    def save(self) -> None:
+        self._lazy()
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self._model.save_pretrained(str(self.save_dir))
+        self._tok.save_pretrained(str(self.save_dir))
+        self._log(f"权重已保存 → {self.save_dir}")
+
+    def load_or_none(self) -> bool:
+        """有已保存的权重就加载，没有返回 False（不静默训练）。"""
+        from pathlib import Path as _P
+
+        if not (_P(self.save_dir) / "config.json").exists():
+            self._log("没有已保存的权重，跳过加载")
+            return False
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+        self._tok = AutoTokenizer.from_pretrained(str(self.save_dir))
+        self._model = AutoModelForSequenceClassification.from_pretrained(str(self.save_dir))
+        self._model.to(self.device)
+        self._model.eval()
+        return True
+
     def predict_proba(self, texts: Sequence[str]) -> list[float]:
         self._lazy()
         if self.chunked:

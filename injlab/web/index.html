@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>injlab · 提示注入检测器对抗鲁棒性实验台</title>
+<style>
+/* 全部内联：页面只发一次请求，断网也能跑 */
+:root{
+  --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eef2f6; --line:#d8dee6;
+  --ink:#1f2933; --ink2:#5b6b7c; --ink3:#8894a3;
+  --blue:#2f5d8a; --blue2:#e8f0f8; --red:#b91c1c; --red2:#fdeaea;
+  --green:#15803d; --green2:#e8f6ed; --amber:#b45309; --amber2:#fdf3e3;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
+}
+[data-theme="dark"]{
+  --bg:#14181d; --bg2:#1a1f26; --bg3:#232a33; --line:#333c48;
+  --ink:#e6eaf0; --ink2:#a8b3c1; --ink3:#78838f;
+  --blue:#7aa7d4; --blue2:#1d2b3a; --red:#e8756d; --red2:#3a2222;
+  --green:#7ec98f; --green2:#1c2f22; --amber:#e0a458; --amber2:#33291a;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--blue)}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--bg);
+  color:var(--ink);border-radius:6px;padding:7px 13px;transition:.12s}
+button:hover{background:var(--bg3)}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button.primary:hover{filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+textarea{width:100%;min-height:150px;resize:vertical;line-height:1.7;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);
+  background:var(--bg2);position:sticky;top:0;z-index:10}
+.brand{font-weight:650;letter-spacing:.02em}
+.brand small{font-weight:400;color:var(--ink3);margin-left:8px;font-size:12px}
+.spacer{flex:1}
+nav{display:flex;gap:2px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--bg2)}
+nav button{border:0;background:none;border-radius:0;padding:11px 15px;color:var(--ink2);
+  border-bottom:2px solid transparent}
+nav button.on{color:var(--ink);border-bottom-color:var(--blue);font-weight:600}
+main{padding:22px;max-width:1180px;margin:0 auto}
+.page{display:none}.page.on{display:block}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 4px;font-size:15px}
+.card p.hint{margin:0 0 12px;color:var(--ink3);font-size:12.5px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ink2);font-weight:600;font-size:12px;text-transform:none}
+td.num{font-variant-numeric:tabular-nums;text-align:right}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.badge.bad{background:var(--red2);color:var(--red)}
+.badge.ok{background:var(--green2);color:var(--green)}
+.badge.warn{background:var(--amber2);color:var(--amber)}
+.badge.mute{background:var(--bg3);color:var(--ink3)}
+.bar{height:9px;border-radius:99px;background:var(--bg3);overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;border-radius:99px;transition:width .35s}
+.hl{background:var(--red2);box-shadow:inset 0 -2px 0 var(--red);border-radius:2px}
+.doc{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto;
+  background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.75}
+.kv{display:flex;gap:26px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2);margin-top:6px}
+.kv b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
+.step{border-left:3px solid var(--line);padding:2px 0 2px 13px;margin:11px 0}
+.step.pass{border-left-color:var(--green)}
+.step.fail{border-left-color:var(--red)}
+.step.skip{border-left-color:var(--amber)}
+.step .t{font-weight:600;font-size:13.5px}
+.step .n{color:var(--ink3);font-size:12px}
+.step .r{font-size:12.5px;margin-top:3px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
+  border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+img.chart{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+footer{color:var(--ink3);font-size:12px;text-align:center;padding:26px 0 34px}
+/* 论文截图模式：去掉一切装饰 */
+body.print header,body.print nav,body.print button,body.print footer{display:none!important}
+body.print main{padding:0;max-width:100%}
+body.print .card{box-shadow:none;background:#fff;border-color:#ccc}
+body.print .page{display:block!important;margin-bottom:26px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">injlab <small>提示注入检测器 · 对抗鲁棒性实验台</small></div>
+  <div class="spacer"></div>
+  <label style="color:var(--ink2);font-size:12.5px">检测器
+    <select id="detSel" style="margin-left:6px"></select>
+  </label>
+  <button id="themeBtn" title="切换深浅色">◐ 深色</button>
+</header>
+
+<nav>
+  <button class="on" data-tab="lab">检测台</button>
+  <button data-tab="scenario">一键剧本</button>
+  <button data-tab="attacks">攻击谱系</button>
+  <button data-tab="exp">实验对比</button>
+  <button data-tab="audit">审计链</button>
+</nav>
+
+<main>
+<!-- ============ 检测台 ============ -->
+<section class="page on" id="p-lab">
+  <div class="card">
+    <h3>提交文本做检测</h3>
+    <p class="hint">检测器给出分数与逐块分数；超过阈值的片段会在原文里标红。默认用 tfidf-char——它在本项目 A1 对比里指标最好，且不需要加载神经网络。</p>
+    <textarea id="input" placeholder="粘贴一段文本，或点下面的「随机样本」从真实语料里取一条…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnDetect">检测</button>
+      <button id="btnRand">随机样本</button>
+      <button id="btnDeep" title="起子进程加载神经检测器，约 10 秒">深度检测</button>
+      <label class="row" style="gap:5px;font-size:12.5px;color:var(--ink2)">
+        <input type="checkbox" id="normChk" style="width:auto"> 先做输入规范化
+      </label>
+    </div>
+    <div id="out"></div>
+  </div>
+</section>
+
+<!-- ============ 一键剧本 ============ -->
+<section class="page" id="p-scenario">
+  <div class="card">
+    <h3>一键剧本</h3>
+    <p class="hint">顺序固定（正常 → 注入 → 绕过 → 加固 → 长文档 → 审计），内容每次随机：用的良性问题、载荷、混淆方式都会变。seed 会显示出来，点「重放」能复现同一遍。</p>
+    <div class="row">
+      <button class="primary" id="btnPlay">跑一遍</button>
+      <button id="btnReplay">重放上一遍</button>
+      <span id="seedBox" class="mono" style="color:var(--ink3)"></span>
+    </div>
+    <div id="scriptOut" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<!-- ============ 攻击谱系 ============ -->
+<section class="page" id="p-attacks">
+  <div class="card">
+    <h3>攻击谱系</h3>
+    <p class="hint">同一句载荷经过不同变换后的样子。点「试一下」把它送进检测台，直接看分数掉多少。</p>
+    <div id="atkOut">加载中…</div>
+  </div>
+</section>
+
+<!-- ============ 实验对比 ============ -->
+<section class="page" id="p-exp">
+  <div class="card">
+    <h3>A1 全基线对比</h3>
+    <p class="hint">同一份数据、同一套攻击、同一套阈值口径。阈值只在训练集良性样本上校准，正样本标签不参与。</p>
+    <img class="chart" id="chartA1" alt="A1 对比图">
+  </div>
+  <div class="card">
+    <h3>攻击谱系鲁棒性</h3>
+    <p class="hint">格子里的数字是 ASR*：只统计"改完人还读得懂"的攻击。n/a 表示该攻击下没有一条样本能通过意图保留判据。</p>
+    <img class="chart" id="chartAtk" alt="攻击谱系热力图">
+  </div>
+  <div class="card">
+    <h3>运行记录</h3>
+    <div id="expOut">加载中…</div>
+  </div>
+</section>
+
+<!-- ============ 审计链 ============ -->
+<section class="page" id="p-audit">
+  <div class="card">
+    <h3>哈希链校验</h3>
+    <p class="hint">每条检测记录都存着前一条的哈希，串成一条链。改动任何一条历史记录，后面的链就会断。</p>
+    <div class="row"><button class="primary" id="btnVerify">校验整条链</button></div>
+    <div id="auditOut" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <h3>数据库统计</h3>
+    <div id="statsOut">加载中…</div>
+  </div>
+</section>
+
+<footer>injlab · 本地运行 · 无外部依赖 · <span id="healthLine"></span></footer>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = v => (v==null||isNaN(v)) ? "—" : (v*100).toFixed(1)+"%";
+const num = v => (v==null||isNaN(v)) ? "—" : (+v).toFixed(3);
+
+/* ---------- 主题 ---------- */
+const themeBtn = $("#themeBtn");
+function setTheme(t){
+  document.documentElement.dataset.theme = t;
+  try{localStorage.setItem("injlab.theme", t)}catch(e){}
+  themeBtn.textContent = t === "dark" ? "◑ 浅色" : "◐ 深色";
+}
+setTheme((()=>{try{return localStorage.getItem("injlab.theme")||"light"}catch(e){return "light"}})());
+themeBtn.onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+
+/* 打印模式：?print=1 去掉所有交互装饰 */
+if (new URLSearchParams(location.search).get("print") === "1") {
+  document.body.classList.add("print");
+}
+
+/* ---------- 页签 ---------- */
+$$("nav button").forEach(b => b.onclick = () => {
+  $$("nav button").forEach(x => x.classList.toggle("on", x === b));
+  $$(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + b.dataset.tab));
+  if (b.dataset.tab === "attacks") loadAttacks();
+  if (b.dataset.tab === "exp") loadExperiments();
+  if (b.dataset.tab === "audit") { loadStats(); }
+});
+
+/* ---------- 健康检查 ---------- */
+async function jget(u){ const r = await fetch(u); if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || r.status); return r.json(); }
+async function jpost(u, body){ const r = await fetch(u, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); const j = await r.json().catch(()=>({detail:r.status})); if(!r.ok) throw new Error(j.detail||r.status); return j; }
+
+jget("/health").then(h => {
+  $("#detSel").innerHTML = [...h.detectors, ...h.deep].map(d =>
+    `<option value="${d}" ${d===h.default?"selected":""}>${d}${h.deep.includes(d)?"（深度，约10秒）":""}</option>`).join("");
+  $("#healthLine").textContent = `检测器 ${h.detectors.length} 个在线 · 默认 ${h.default}`;
+}).catch(e => { $("#healthLine").textContent = "服务未连接"; });
+
+/* ---------- 检测台 ---------- */
+let lastResult = null;
+
+function renderDetect(r, text){
+  const color = r.pred === "malicious" ? "var(--red)" : "var(--green)";
+  let hl = esc(text);
+  if (r.chunks && r.chunks.length){
+    const hot = r.chunks.filter(c => c.score > r.threshold);
+    if (hot.length){
+      // 从后往前插，避免前面插入的标签改变后面位置
+      const parts = [];
+      let pos = 0;
+      hot.sort((a,b)=>a.start-b.start).forEach(c => {
+        if (c.start < pos) return;
+        parts.push(esc(text.slice(pos, c.start)));
+        parts.push(`<span class="hl" title="分数 ${c.score.toFixed(3)}">${esc(text.slice(c.start, c.end))}</span>`);
+        pos = c.end;
+      });
+      parts.push(esc(text.slice(pos)));
+      hl = parts.join("");
+    }
+  }
+  $("#out").innerHTML = `
+    <div class="card" style="margin-top:14px;background:var(--bg)">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <span class="badge ${r.pred==='malicious'?'bad':'ok'}">${r.pred==='malicious'?'判定：恶意':'判定：良性'}</span>
+          <span class="mono" style="margin-left:8px;color:var(--ink2)">${esc(r.detector)}${r.normalized?' · 已规范化':''}</span>
+          ${r.cold_start?'<span class="badge warn" style="margin-left:8px">冷启动</span>':''}
+        </div>
+        <div class="mono" style="font-size:20px;font-weight:650;color:${color}">${r.score.toFixed(4)}</div>
+      </div>
+      <div class="bar"><i style="width:${Math.min(100,r.score*100)}%;background:${color}"></i></div>
+      <div class="kv">
+        <span>阈值 <b>${r.threshold.toFixed(3)}</b></span>
+        <span>词数 <b>${r.n_words}</b></span>
+        ${r.naive_truncated_score!=null?`<span>朴素截断(512词) <b>${r.naive_truncated_score.toFixed(3)}</b></span>`:""}
+        ${r.chunks&&r.chunks.length?`<span>分块数 <b>${r.chunks.length}</b></span><span>最高块 <b>${r.max_chunk_score.toFixed(3)}</b></span>`:""}
+      </div>
+      <div class="doc" style="margin-top:12px">${hl}</div>
+      ${r.chunks&&r.chunks.length?`
+        <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--ink2);font-size:12.5px">逐块分数</summary>
+          <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+            ${r.chunks.map((c,i)=>`<span class="badge ${c.score>r.threshold?'bad':'mute'}" title="字符 ${c.start}–${c.end}">块${i+1}: ${c.score.toFixed(2)}</span>`).join("")}
+          </div>
+        </details>`:""}
+    </div>`;
+}
+
+async function doDetect(deep){
+  const text = $("#input").value.trim();
+  if (!text) return;
+  const btn = deep ? $("#btnDeep") : $("#btnDetect");
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${deep?"加载模型…":"检测中"}`;
+  try{
+    const det = deep ? $("#detSel").value : null;
+    const r = await jpost("/detect", {text, detector: deep ? $("#detSel").value : $("#detSel").value,
+      normalize: $("#normChk").checked});
+    lastResult = r; renderDetect(r, text);
+  }catch(e){
+    $("#out").innerHTML = `<div class="card" style="margin-top:14px;background:var(--red2);color:var(--red)">${esc(e.message)}</div>`;
+  }finally{ btn.disabled = false; btn.innerHTML = old; }
+}
+$("#btnDetect").onclick = () => doDetect(false);
+$("#btnDeep").onclick = () => doDetect(true);
+$("#btnRand").onclick = async () => {
+  const j = await jget("/samples/random?n=1");
+  if (j.samples.length){ $("#input").value = j.samples[0].text; }
+};
+
+/* ---------- 攻击谱系 ---------- */
+async function loadAttacks(){
+  const j = await jget("/attacks");
+  $("#atkOut").innerHTML = `<table><thead><tr><th>名称</th><th>族</th><th>说明</th><th>变换后的样子</th><th></th></tr></thead><tbody>
+    ${j.attacks.map(a => `<tr>
+      <td class="mono">${esc(a.name)}</td>
+      <td><span class="badge mute">${esc(a.family)}</span></td>
+      <td style="color:var(--ink2);font-size:12.5px">${esc(a.description)}</td>
+      <td class="mono" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.example)}">${esc(a.example)}</td>
+      <td><button data-try="${esc(a.name)}">试一下</button></td>
+    </tr>`).join("")}</tbody></table>`;
+  $$("[data-try]").forEach(b => b.onclick = () => {
+    const a = j.attacks.find(x => x.name === b.dataset.try);
+    $("#input").value = a.example;
+    $$("nav button").forEach(x => x.classList.toggle("on", x.dataset.tab === "lab"));
+    $$(".page").forEach(p => p.classList.toggle("on", p.id === "p-lab"));
+    doDetect(false);
+  });
+}
+
+/* ---------- 实验 ---------- */
+async function loadExperiments(){
+  try{
+    const j = await jget("/experiments");
+    $("#expOut").innerHTML = j.experiments.length ? `<table><thead><tr><th>运行</th><th>检测器</th><th class="num">TPR@FPR=1%</th><th class="num">AUC</th><th class="num">F1</th></tr></thead><tbody>
+      ${j.experiments.map(e => `<tr><td class="mono">${esc(e.name)}</td><td>${esc(e.detector||"—")}</td>
+        <td class="num">${num(e.tpr_at_fpr)}</td><td class="num">${num(e.auc)}</td><td class="num">${num(e.f1)}</td></tr>`).join("")}
+      </tbody></table>` : `<p class="hint">还没有运行记录，先跑一次 <span class="mono">python -m injlab a1</span>。</p>`;
+  }catch(e){ $("#expOut").textContent = e.message; }
+}
+
+/* ---------- 审计 ---------- */
+$("#btnVerify").onclick = async () => {
+  const t0 = performance.now();
+  try{
+    const j = await jget("/audit/verify");
+    $("#auditOut").innerHTML = `<span class="badge ok">链完整</span>
+      <span class="mono" style="margin-left:10px;color:var(--ink2)">${esc(j.detail)} · ${(performance.now()-t0).toFixed(0)}ms</span>`;
+  }catch(e){
+    $("#auditOut").innerHTML = `<span class="badge bad">校验失败</span>
+      <span class="mono" style="margin-left:10px;color:var(--red)">${esc(e.message)}</span>`;
+  }
+};
+async function loadStats(){
+  try{
+    const s = await jget("/stats");
+    $("#statsOut").innerHTML = `<div class="row" style="gap:24px">` +
+      Object.entries(s).map(([k,v]) => `<div><div class="mono" style="font-size:19px;font-weight:650">${v}</div>
+        <div style="color:var(--ink3);font-size:12px">${esc(k)}</div></div>`).join("") + `</div>`;
+  }catch(e){ $("#statsOut").textContent = e.message; }
+}
+
+/* ---------- 一键剧本 ---------- */
+let lastSeed = null;
+async function runScript(seed){
+  const btn = $("#btnPlay");
+  btn.disabled = true;
+  const old = btn.innerHTML; btn.innerHTML = `<span class="spin"></span> 执行中`;
+  try{
+    const j = await jget("/script" + (seed!=null?`?seed=${seed}`:""));
+    lastSeed = j.seed;
+    $("#seedBox").textContent = `seed = ${j.seed}`;
+    const box = $("#scriptOut");
+    box.innerHTML = j.steps.map(s => `<div class="step" id="st-${s.id}">
+        <div class="t">${esc(s.title)}</div>
+        <div class="n">${esc(s.note)}</div>
+        <div class="r mono" style="color:var(--ink3)">等待…</div>
+      </div>`).join("");
+
+    for (const s of j.steps){
+      const el = $("#st-" + s.id);
+      const resEl = el.querySelector(".r");
+      try{
+        if (s.kind === "audit"){
+          const v = await jget("/audit/verify");
+          el.classList.add("pass");
+          resEl.innerHTML = `<span class="badge ok">通过</span> ${esc(v.detail)}`;
+          continue;
+        }
+        const r = await jpost("/detect", {text: s.text, normalize: !!s.normalize});
+        const blocked = r.pred === "malicious";
+        let verdict, cls;
+        if (s.kind === "benign"){ verdict = blocked ? "误报" : "放行"; cls = blocked ? "fail" : "pass"; }
+        else if (s.kind === "truncation"){
+          const naiveNo = (r.naive_truncated_score ?? 1) <= r.threshold;
+          const chunkYes = (r.max_chunk_score ?? 0) > r.threshold;
+          verdict = `朴素截断 ${naiveNo ? "漏检" : "检出"} / 分块滑窗 ${chunkYes ? "检出" : "漏检"}`;
+          cls = (naiveNo && chunkYes) ? "pass" : "skip";
+        } else if (s.expect === "block_after_norm"){
+          verdict = blocked ? "规范化后拦住" : "仍未拦住"; cls = blocked ? "pass" : "fail";
+        } else if (s.kind === "obfuscate"){
+          verdict = blocked ? "没能绕过" : "成功绕过"; cls = blocked ? "skip" : "pass";
+        } else {
+          verdict = blocked ? "拦住" : "漏过"; cls = blocked ? "pass" : "fail";
+        }
+        el.classList.add(cls);
+        resEl.innerHTML = `<span class="badge ${blocked?'bad':'ok'}">${blocked?'恶意':'良性'}</span>
+          <span class="mono" style="margin-left:8px">分数 ${r.score.toFixed(3)} / 阈值 ${r.threshold.toFixed(3)}</span>
+          <span style="margin-left:10px;color:var(--ink2)">${verdict}</span>`;
+      }catch(e){
+        el.classList.add("fail"); resEl.textContent = "出错：" + e.message;
+      }
+    }
+  }catch(e){
+    $("#scriptOut").innerHTML = `<div style="color:var(--red)">${esc(e.message)}</div>`;
+  }finally{ btn.disabled = false; btn.innerHTML = old; }
+}
+$("#btnPlay").onclick = () => runScript(null);
+$("#btnReplay").onclick = () => runScript(lastSeed);
+
+/* ---------- 启动 ---------- */
+jget("/samples/random?n=1").then(j => {
+  if (j.samples.length && !$("#input").value) $("#input").value = j.samples[0].text;
+}).catch(()=>{});
+loadStats();
+</script>
+</body>
+</html>
